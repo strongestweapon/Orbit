@@ -13,12 +13,14 @@
 		48822090527C5A268376AE8A /* ReferenceVideoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 017234CB6B16D3AD70918CEE /* ReferenceVideoView.swift */; };
 		6AD4E83C3CF65EF2EDA5C33C /* MetalRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11E32FED746AE6ED06BF720 /* MetalRenderer.swift */; };
 		721B569C836139B2C61DED20 /* KakaoTalk_Video_2026-11-10-09-37-08.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = 75D42149EF4E1E7C3442ACEA /* KakaoTalk_Video_2026-11-10-09-37-08.mp4 */; };
+		848B88E74A505DA5835C60BF /* OrbitAppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = FFFC97DCF2880340E48CD95A /* OrbitAppIcon.icns */; };
 		8DC5BD10D27A221949CB860F /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49871CDB0B18BD84E815765F /* ContentView.swift */; };
 		9AA209DCC7BE4490914BEDA9 /* golden-drift-reference.png in Resources */ = {isa = PBXBuildFile; fileRef = 3A70140ADF511300B34F9BA1 /* golden-drift-reference.png */; };
 		9B98678E642671FB812C13BE /* OSCReceiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 442ABBD99849283C21E7F61F /* OSCReceiver.swift */; };
 		A75402C429AFB995A4186408 /* OutputWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB8BB74462AC42160005915D /* OutputWindowController.swift */; };
 		AF0E293E391BF8855FC7AD85 /* metal in Resources */ = {isa = PBXBuildFile; fileRef = 698220E0EBB4933D774EE19E /* metal */; };
 		B6033C55F8A1E82FA82B6020 /* OrbitModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C8A50C94742D7DA18CF8FB1 /* OrbitModel.swift */; };
+		BD0312FB7E1888AA3639BBCD /* OrbitLogo.png in Resources */ = {isa = PBXBuildFile; fileRef = 332AC379A0E28B5E029787A2 /* OrbitLogo.png */; };
 		C0BC95029586B3FBB9B29D4A /* OrbitApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADFAA53066E70B7AA6CD3986 /* OrbitApp.swift */; };
 		F3B5325239EF140CDC65C4A1 /* spectral-fragments-reference.png in Resources */ = {isa = PBXBuildFile; fileRef = 4B03381080881BF0E1A2C350 /* spectral-fragments-reference.png */; };
 		F71A3820A15F0CAF6FBC13B3 /* config in Resources */ = {isa = PBXBuildFile; fileRef = 7E9691F5740D86839DD72043 /* config */; };
@@ -27,6 +29,7 @@
 /* Begin PBXFileReference section */
 		017234CB6B16D3AD70918CEE /* ReferenceVideoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReferenceVideoView.swift; sourceTree = "<group>"; };
 		1C8A50C94742D7DA18CF8FB1 /* OrbitModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrbitModel.swift; sourceTree = "<group>"; };
+		332AC379A0E28B5E029787A2 /* OrbitLogo.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = OrbitLogo.png; sourceTree = "<group>"; };
 		3A70140ADF511300B34F9BA1 /* golden-drift-reference.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "golden-drift-reference.png"; sourceTree = "<group>"; };
 		442ABBD99849283C21E7F61F /* OSCReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OSCReceiver.swift; sourceTree = "<group>"; };
 		49871CDB0B18BD84E815765F /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -41,6 +44,7 @@
 		B11E32FED746AE6ED06BF720 /* MetalRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalRenderer.swift; sourceTree = "<group>"; };
 		B23ACF8A6EDC193ECA1207A0 /* OrbitTextureSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrbitTextureSource.swift; sourceTree = "<group>"; };
 		CFBAF8129D2DC544A2451FB4 /* textures */ = {isa = PBXFileReference; lastKnownFileType = folder; name = textures; path = ../OrbitTextures/textures; sourceTree = SOURCE_ROOT; };
+		FFFC97DCF2880340E48CD95A /* OrbitAppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = OrbitAppIcon.icns; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -65,6 +69,8 @@
 			isa = PBXGroup;
 			children = (
 				3A70140ADF511300B34F9BA1 /* golden-drift-reference.png */,
+				FFFC97DCF2880340E48CD95A /* OrbitAppIcon.icns */,
+				332AC379A0E28B5E029787A2 /* OrbitLogo.png */,
 				4B03381080881BF0E1A2C350 /* spectral-fragments-reference.png */,
 			);
 			path = Resources;
@@ -159,6 +165,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				721B569C836139B2C61DED20 /* KakaoTalk_Video_2026-11-10-09-37-08.mp4 in Resources */,
+				848B88E74A505DA5835C60BF /* OrbitAppIcon.icns in Resources */,
+				BD0312FB7E1888AA3639BBCD /* OrbitLogo.png in Resources */,
 				F71A3820A15F0CAF6FBC13B3 /* config in Resources */,
 				9AA209DCC7BE4490914BEDA9 /* golden-drift-reference.png in Resources */,
 				AF0E293E391BF8855FC7AD85 /* metal in Resources */,
@@ -194,6 +202,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Orbit;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.graphics-design";
 				INFOPLIST_KEY_NSHumanReadableCopyright = SUPERLESS;
@@ -243,7 +252,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -258,7 +267,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.1.1;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -274,6 +283,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Orbit;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.graphics-design";
 				INFOPLIST_KEY_NSHumanReadableCopyright = SUPERLESS;
@@ -323,7 +333,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -344,7 +354,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.1.1;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

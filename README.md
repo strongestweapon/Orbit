@@ -34,6 +34,12 @@ xcodebuild -project OrbitApp/Orbit.xcodeproj -scheme Orbit \
 
 Metal 소스는 앱에서 런타임에 컴파일합니다. 별도 Metal Toolchain 다운로드는 이 프로젝트 빌드에 필요하지 않습니다. 프로젝트 설정의 원본은 `OrbitApp/project.yml`이며, 재생성할 때는 XcodeGen으로 `xcodegen generate --spec OrbitApp/project.yml`을 실행합니다.
 
+## 로고
+
+앱 아이콘은 승인된 01번 Light Orbit 디자인입니다. 원본은 `Branding/orbit-icon-master.png`, 생성 프롬프트와 폰트 정보는 `Branding/brand.json`에 있습니다. 시안의 ORBIT 글자는 생성된 레터링이며 특정 폰트를 사용한 결과가 아닙니다. 앱 헤더는 유사한 기하학적 산세리프인 macOS 기본 **Avenir Next Medium**, 17 pt, 자간 4 pt를 사용합니다.
+
+`python3 OrbitApp/Tools/package_icon.py`로 원본의 투명도를 유지하면서 16–1024 px 아이콘을 `OrbitApp/Resources/OrbitAppIcon.icns`로 패키징하고 헤더용 `OrbitLogo.png`를 만듭니다. Finder·Dock·앱 정보 창은 같은 아이콘을 사용합니다.
+
 ## LED 출력
 
 논리 링은 **15444 × 300**입니다. 기준 캔버스는 3840 × 2160이며 왼쪽 위에 3564 × 300 네 줄과 1188 × 300 한 줄로 배치하고 나머지는 검정으로 출력합니다. 다른 해상도를 선택하면 이 배치 전체를 16:9 비율로 스케일링합니다.

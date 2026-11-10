@@ -2,6 +2,8 @@ import SwiftUI
 
 private let orbitAccent = Color(red:0.64,green:0.92,blue:0.64)
 private let orbitPanel = Color(white:0.085)
+private let orbitBrandImage = Bundle.main.url(forResource:"OrbitLogo",withExtension:"png")
+    .flatMap { NSImage(contentsOf:$0) }
 private enum OrbitPanel: String, Identifiable {
     case look, sensors, mapping, output
     var id: String { rawValue }
@@ -60,8 +62,13 @@ struct ContentView: View {
     }
     private var transport: some View {
         HStack(spacing:14) {
-            Image(systemName:"circle.hexagongrid").font(.system(size:23)).foregroundStyle(orbitAccent)
-            Text("ORBIT").font(.system(size:15,weight:.bold,design:.rounded)).tracking(3)
+            HStack(spacing:7) {
+                if let image = orbitBrandImage {
+                    Image(nsImage:image).renderingMode(.original).resizable().interpolation(.high).scaledToFit()
+                        .frame(width:38,height:38).accessibilityHidden(true)
+                }
+                Text("ORBIT").font(.custom("AvenirNext-Medium",fixedSize:17)).tracking(4)
+            }.accessibilityElement(children:.combine).accessibilityLabel("Orbit")
             Divider().frame(height:24)
             Button { model.playing.toggle() } label:{
                 Label(model.playing ? "일시정지" : "재생",systemImage:model.playing ? "pause.fill" : "play.fill").frame(width:85)

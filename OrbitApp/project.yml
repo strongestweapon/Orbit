@@ -10,12 +10,18 @@ settings:
     CODE_SIGN_STYLE: Manual
     ENABLE_APP_SANDBOX: NO
     GENERATE_INFOPLIST_FILE: YES
-    MARKETING_VERSION: "0.1.0"
-    CURRENT_PROJECT_VERSION: 1
+    MARKETING_VERSION: "0.1.1"
+    CURRENT_PROJECT_VERSION: 2
 targets:
   Orbit:
     type: application
     platform: macOS
+    info:
+      path: Info.plist
+      properties:
+        CFBundleIconFile: OrbitAppIcon
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
     sources:
       - path: Sources
       - path: Resources

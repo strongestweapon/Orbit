@@ -1,0 +1,14 @@
+{
+  "name": "Orbit — Light Orbit",
+  "concept": "01",
+  "method": "Built-in image_gen edit of the approved concept board",
+  "prompt": "Use case: precise-object-edit / logo-brand.\nInput image is the approved ORBIT logo comparison board. The ONLY edit target is the LEFT icon labelled 01. Produce its final standalone macOS application icon asset. Preserve its exact visual identity: nearly-black rounded square, large perfectly circular narrow luminous ring, bright cool-white upper-left arc, icy-cyan upper-right arc, saturated deep-blue right/lower arc, and the lower-left arc dissolving smoothly into the black center/background. Keep the empty black center, smooth precision edges, the same circular geometry and hue progression. Slightly reduce diffuse bloom for crisp Dock-size legibility. This is NOT a new design exploration.\n\nOutput ONE square 1024x1024 RGBA icon image. Center the black rounded square within the canvas, approximately x=80..944, y=80..944, with softly continuous macOS-style rounded corners. The circle is centered in this tile, diameter about 640 px, band about 36 px with a modest light halo. Only the outside of the black tile is truly transparent, not white or gray; the tile interior and the black center of the ring remain fully opaque. No external cast shadow. Very subtle dimensional edge only. Front-on view, perfectly circular ring, no perspective. No text, no 01 number, no ORBIT word, no other icons, no board background, no watermarks, no stars/particles. Recreate the selected 01 with high fidelity as a production icon.",
+  "typography": {
+    "concept": "Generated lettering; no identifiable font file was used.",
+    "applicationFont": "AvenirNext-Medium",
+    "sizePoints": 17,
+    "trackingPoints": 4
+  },
+  "master": "orbit-icon-master.png",
+  "version": 1
+}
