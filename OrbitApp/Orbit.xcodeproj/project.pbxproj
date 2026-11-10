@@ -1,0 +1,375 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		09735A8F04BCFE0F70C37F62 /* textures in Resources */ = {isa = PBXBuildFile; fileRef = CFBAF8129D2DC544A2451FB4 /* textures */; };
+		319E46BB462C32B7629C07A4 /* OrbitTextureSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = B23ACF8A6EDC193ECA1207A0 /* OrbitTextureSource.swift */; };
+		48822090527C5A268376AE8A /* ReferenceVideoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 017234CB6B16D3AD70918CEE /* ReferenceVideoView.swift */; };
+		681C843A5DDA176C16D62C51 /* KakaoTalk_Video_2026-11-10-09-37-08.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = 224EDD9A6CC76B831B6CC42B /* KakaoTalk_Video_2026-11-10-09-37-08.mp4 */; };
+		6AD4E83C3CF65EF2EDA5C33C /* MetalRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11E32FED746AE6ED06BF720 /* MetalRenderer.swift */; };
+		8DC5BD10D27A221949CB860F /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49871CDB0B18BD84E815765F /* ContentView.swift */; };
+		9AA209DCC7BE4490914BEDA9 /* golden-drift-reference.png in Resources */ = {isa = PBXBuildFile; fileRef = 3A70140ADF511300B34F9BA1 /* golden-drift-reference.png */; };
+		9B98678E642671FB812C13BE /* OSCReceiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 442ABBD99849283C21E7F61F /* OSCReceiver.swift */; };
+		AF0E293E391BF8855FC7AD85 /* metal in Resources */ = {isa = PBXBuildFile; fileRef = 698220E0EBB4933D774EE19E /* metal */; };
+		B6033C55F8A1E82FA82B6020 /* OrbitModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C8A50C94742D7DA18CF8FB1 /* OrbitModel.swift */; };
+		C0BC95029586B3FBB9B29D4A /* OrbitApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADFAA53066E70B7AA6CD3986 /* OrbitApp.swift */; };
+		F3B5325239EF140CDC65C4A1 /* spectral-fragments-reference.png in Resources */ = {isa = PBXBuildFile; fileRef = 4B03381080881BF0E1A2C350 /* spectral-fragments-reference.png */; };
+		F71A3820A15F0CAF6FBC13B3 /* config in Resources */ = {isa = PBXBuildFile; fileRef = 7E9691F5740D86839DD72043 /* config */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		017234CB6B16D3AD70918CEE /* ReferenceVideoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReferenceVideoView.swift; sourceTree = "<group>"; };
+		1C8A50C94742D7DA18CF8FB1 /* OrbitModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrbitModel.swift; sourceTree = "<group>"; };
+		224EDD9A6CC76B831B6CC42B /* KakaoTalk_Video_2026-11-10-09-37-08.mp4 */ = {isa = PBXFileReference; path = "KakaoTalk_Video_2026-11-10-09-37-08.mp4"; sourceTree = "<group>"; };
+		3A70140ADF511300B34F9BA1 /* golden-drift-reference.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "golden-drift-reference.png"; sourceTree = "<group>"; };
+		442ABBD99849283C21E7F61F /* OSCReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OSCReceiver.swift; sourceTree = "<group>"; };
+		49871CDB0B18BD84E815765F /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		4B03381080881BF0E1A2C350 /* spectral-fragments-reference.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "spectral-fragments-reference.png"; sourceTree = "<group>"; };
+		698220E0EBB4933D774EE19E /* metal */ = {isa = PBXFileReference; lastKnownFileType = folder; name = metal; path = ../OrbitShaders/metal; sourceTree = SOURCE_ROOT; };
+		7E9691F5740D86839DD72043 /* config */ = {isa = PBXFileReference; lastKnownFileType = folder; name = config; path = ../OrbitShaders/config; sourceTree = SOURCE_ROOT; };
+		93E43D9E19F5EF7D480B0771 /* Orbit.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Orbit.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		ADFAA53066E70B7AA6CD3986 /* OrbitApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrbitApp.swift; sourceTree = "<group>"; };
+		B11E32FED746AE6ED06BF720 /* MetalRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalRenderer.swift; sourceTree = "<group>"; };
+		B23ACF8A6EDC193ECA1207A0 /* OrbitTextureSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrbitTextureSource.swift; sourceTree = "<group>"; };
+		CFBAF8129D2DC544A2451FB4 /* textures */ = {isa = PBXFileReference; lastKnownFileType = folder; name = textures; path = ../OrbitTextures/textures; sourceTree = SOURCE_ROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		B307547D1ABD752BE02491B9 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				93E43D9E19F5EF7D480B0771 /* Orbit.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		B6871FA730657E0F618EBA65 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				3A70140ADF511300B34F9BA1 /* golden-drift-reference.png */,
+				4B03381080881BF0E1A2C350 /* spectral-fragments-reference.png */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		B85AEC8D8F54381C5C9634F7 /* SUPERLESS-981 */ = {
+			isa = PBXGroup;
+			children = (
+				224EDD9A6CC76B831B6CC42B /* KakaoTalk_Video_2026-11-10-09-37-08.mp4 */,
+			);
+			name = "SUPERLESS-981";
+			path = ..;
+			sourceTree = "<group>";
+		};
+		C5F01767FDAE31EE06DFF523 = {
+			isa = PBXGroup;
+			children = (
+				7E9691F5740D86839DD72043 /* config */,
+				698220E0EBB4933D774EE19E /* metal */,
+				CFBAF8129D2DC544A2451FB4 /* textures */,
+				B6871FA730657E0F618EBA65 /* Resources */,
+				D0DC853F0023AB4D57FBEFC2 /* Sources */,
+				B85AEC8D8F54381C5C9634F7 /* SUPERLESS-981 */,
+				B307547D1ABD752BE02491B9 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		D0DC853F0023AB4D57FBEFC2 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				49871CDB0B18BD84E815765F /* ContentView.swift */,
+				B11E32FED746AE6ED06BF720 /* MetalRenderer.swift */,
+				ADFAA53066E70B7AA6CD3986 /* OrbitApp.swift */,
+				1C8A50C94742D7DA18CF8FB1 /* OrbitModel.swift */,
+				B23ACF8A6EDC193ECA1207A0 /* OrbitTextureSource.swift */,
+				442ABBD99849283C21E7F61F /* OSCReceiver.swift */,
+				017234CB6B16D3AD70918CEE /* ReferenceVideoView.swift */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		B87EF018B641D85E34ED2D32 /* Orbit */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1ED43C45F010E6E18A4680AC /* Build configuration list for PBXNativeTarget "Orbit" */;
+			buildPhases = (
+				1A83EACBC247740EBC0E6135 /* Sources */,
+				744EABC5C142532226634E12 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Orbit;
+			packageProductDependencies = (
+			);
+			productName = Orbit;
+			productReference = 93E43D9E19F5EF7D480B0771 /* Orbit.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		0A57824173AF238C16E5DFDB /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					B87EF018B641D85E34ED2D32 = {
+						ProvisioningStyle = Manual;
+					};
+				};
+			};
+			buildConfigurationList = 3B09B19ED5B1850084012594 /* Build configuration list for PBXProject "Orbit" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = C5F01767FDAE31EE06DFF523;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = B307547D1ABD752BE02491B9 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				B87EF018B641D85E34ED2D32 /* Orbit */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		744EABC5C142532226634E12 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				681C843A5DDA176C16D62C51 /* KakaoTalk_Video_2026-11-10-09-37-08.mp4 in Resources */,
+				F71A3820A15F0CAF6FBC13B3 /* config in Resources */,
+				9AA209DCC7BE4490914BEDA9 /* golden-drift-reference.png in Resources */,
+				AF0E293E391BF8855FC7AD85 /* metal in Resources */,
+				F3B5325239EF140CDC65C4A1 /* spectral-fragments-reference.png in Resources */,
+				09735A8F04BCFE0F70C37F62 /* textures in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		1A83EACBC247740EBC0E6135 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8DC5BD10D27A221949CB860F /* ContentView.swift in Sources */,
+				6AD4E83C3CF65EF2EDA5C33C /* MetalRenderer.swift in Sources */,
+				9B98678E642671FB812C13BE /* OSCReceiver.swift in Sources */,
+				C0BC95029586B3FBB9B29D4A /* OrbitApp.swift in Sources */,
+				B6033C55F8A1E82FA82B6020 /* OrbitModel.swift in Sources */,
+				319E46BB462C32B7629C07A4 /* OrbitTextureSource.swift in Sources */,
+				48822090527C5A268376AE8A /* ReferenceVideoView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		1C3F5A8A5772DFD0CD0785E5 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Orbit;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.graphics-design";
+				INFOPLIST_KEY_NSHumanReadableCopyright = SUPERLESS;
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "현장 센서의 OSC 데이터를 수신합니다.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = studio.superless.Orbit;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		58C4C1DF9D487759A4FB7D08 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		73F0DFF75D6E8A438E59D6FA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Orbit;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.graphics-design";
+				INFOPLIST_KEY_NSHumanReadableCopyright = SUPERLESS;
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "현장 센서의 OSC 데이터를 수신합니다.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = studio.superless.Orbit;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		FBFF5D8A6298BD9025349208 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		1ED43C45F010E6E18A4680AC /* Build configuration list for PBXNativeTarget "Orbit" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				73F0DFF75D6E8A438E59D6FA /* Debug */,
+				1C3F5A8A5772DFD0CD0785E5 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		3B09B19ED5B1850084012594 /* Build configuration list for PBXProject "Orbit" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FBFF5D8A6298BD9025349208 /* Debug */,
+				58C4C1DF9D487759A4FB7D08 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 0A57824173AF238C16E5DFDB /* Project object */;
+}

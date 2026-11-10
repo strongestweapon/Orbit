@@ -1,0 +1,18 @@
+# Build and local state
+.build/
+DerivedData/
+OrbitApp/build/
+**/xcuserdata/
+*.xcuserstate
+.DS_Store
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.env.*
+
+# Generated reviews, previews and delivery archives
+OrbitShaders/previews/
+OrbitShaders/review/
+OrbitTextures/review/
+*.zip

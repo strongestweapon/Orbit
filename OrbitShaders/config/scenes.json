@@ -1,0 +1,577 @@
+{
+  "schemaVersion": 2,
+  "referenceVideo": "KakaoTalk_Video_2026-11-10-09-37-08.mp4",
+  "logicalRing": [
+    15444,
+    300
+  ],
+  "packedRegion": [
+    3564,
+    1500
+  ],
+  "outputCanvas": [
+    3840,
+    2160
+  ],
+  "views": {
+    "strip": 0,
+    "ring": 1,
+    "packed4k": 2
+  },
+  "coordinates": {
+    "origin": "top-left",
+    "u": "clockwise from twelve oclock",
+    "v": "inner to outer"
+  },
+  "uniformBuffer": {
+    "sizeBytes": 80,
+    "type": "20 tightly packed float32 values",
+    "fields": [
+      "outputWidth",
+      "outputHeight",
+      "viewMode",
+      "phaseTime",
+      "density",
+      "turbulence",
+      "energy",
+      "hueShift",
+      "brightness",
+      "seed",
+      "angleOffset",
+      "flipU",
+      "flipV",
+      "ringWidth",
+      "testPattern",
+      "markerWidth",
+      "coverage",
+      "gapSoftness",
+      "gapMotion",
+      "fragmentation"
+    ]
+  },
+  "outputColor": "display-referred SDR RGB; RGBA8Unorm, no second sRGB encoding",
+  "metalCompileOptions": {
+    "fastMathEnabled": false
+  },
+  "parameterSchema": [
+    {
+      "id": "speed",
+      "target": "clock.speed",
+      "type": "float",
+      "min": 0,
+      "max": 3
+    },
+    {
+      "id": "density",
+      "target": "uniform.density",
+      "type": "float",
+      "min": 0,
+      "max": 1
+    },
+    {
+      "id": "turbulence",
+      "target": "uniform.turbulence",
+      "type": "float",
+      "min": 0,
+      "max": 1
+    },
+    {
+      "id": "energy",
+      "target": "uniform.energy",
+      "type": "float",
+      "min": 0,
+      "max": 1
+    },
+    {
+      "id": "brightness",
+      "target": "uniform.brightness",
+      "type": "float",
+      "min": 0,
+      "max": 1
+    },
+    {
+      "id": "coverage",
+      "target": "uniform.coverage",
+      "type": "float",
+      "min": 0,
+      "max": 1
+    },
+    {
+      "id": "gapSoftness",
+      "target": "uniform.gapSoftness",
+      "type": "float",
+      "min": 0,
+      "max": 1
+    },
+    {
+      "id": "gapMotion",
+      "target": "uniform.gapMotion",
+      "type": "float",
+      "min": 0,
+      "max": 1
+    },
+    {
+      "id": "fragmentation",
+      "target": "uniform.fragmentation",
+      "type": "float",
+      "min": 0,
+      "max": 1
+    },
+    {
+      "id": "hueShift",
+      "target": "uniform.hueShift",
+      "type": "float",
+      "min": -0.5,
+      "max": 0.5
+    }
+  ],
+  "testPatterns": {
+    "0": "Segments 1-5 + direction",
+    "1": "100x50 pixel grid",
+    "2": "Inner red / outer blue",
+    "3": "RGB",
+    "4": "16-step gray ramp",
+    "5": "White",
+    "6": "Black",
+    "7": "Moving marker",
+    "8": "Segment seams",
+    "9": "Single-pixel checker"
+  },
+  "scenes": [
+    {
+      "id": "01_chroma_flow",
+      "name": "Chroma Flow",
+      "description": "어두운 유체 링",
+      "referenceSeconds": [
+        5,
+        30
+      ],
+      "metal": "metal/01_chroma_flow.metal",
+      "isf": "isf/01_chroma_flow.fs",
+      "computeFunction": "orbit_chroma_flow_compute",
+      "fragmentFunction": "orbit_chroma_flow_fragment",
+      "defaults": {
+        "outputWidth": 1280,
+        "outputHeight": 720,
+        "viewMode": 1,
+        "phaseTime": 0,
+        "density": 0.48,
+        "turbulence": 0.68,
+        "energy": 0.52,
+        "hueShift": 0,
+        "brightness": 1,
+        "seed": 3,
+        "angleOffset": 0,
+        "flipU": 0,
+        "flipV": 0,
+        "ringWidth": 0.128,
+        "testPattern": 0,
+        "markerWidth": 12,
+        "coverage": 1.0,
+        "gapSoftness": 0.8,
+        "gapMotion": 0.25,
+        "fragmentation": 0.0
+      },
+      "defaultClockSpeed": 1.0,
+      "sensorMappingEnabled": true,
+      "testScene": false,
+      "referenceImage": null,
+      "texture": {
+        "file": "01_chroma_flow.mp4",
+        "kind": "video",
+        "width": 2048,
+        "height": 96,
+        "fps": 24,
+        "frames": 552,
+        "duration": 23,
+        "sourceStart": 6,
+        "sourceEnd": 29,
+        "center": [
+          640,
+          360
+        ],
+        "innerRadius": 218,
+        "outerRadius": 250,
+        "seedFile": "01_chroma_flow-seed.png",
+        "seedSourceSeconds": 12
+      }
+    },
+    {
+      "id": "02_solar_bands",
+      "name": "Solar Bands",
+      "description": "주황·연두 방사형 밴드",
+      "referenceSeconds": [
+        30,
+        50
+      ],
+      "metal": "metal/02_solar_bands.metal",
+      "isf": "isf/02_solar_bands.fs",
+      "computeFunction": "orbit_solar_bands_compute",
+      "fragmentFunction": "orbit_solar_bands_fragment",
+      "defaults": {
+        "outputWidth": 1280,
+        "outputHeight": 720,
+        "viewMode": 1,
+        "phaseTime": 0,
+        "density": 0.62,
+        "turbulence": 0.32,
+        "energy": 0.62,
+        "hueShift": 0,
+        "brightness": 1,
+        "seed": 3,
+        "angleOffset": 0,
+        "flipU": 0,
+        "flipV": 0,
+        "ringWidth": 0.128,
+        "testPattern": 0,
+        "markerWidth": 12,
+        "coverage": 1.0,
+        "gapSoftness": 0.8,
+        "gapMotion": 0.25,
+        "fragmentation": 0.0
+      },
+      "defaultClockSpeed": 1.0,
+      "sensorMappingEnabled": true,
+      "testScene": false,
+      "referenceImage": null,
+      "texture": {
+        "file": "02_solar_bands.mp4",
+        "kind": "video",
+        "width": 2048,
+        "height": 96,
+        "fps": 24,
+        "frames": 432,
+        "duration": 18,
+        "sourceStart": 31,
+        "sourceEnd": 49,
+        "center": [
+          640,
+          360
+        ],
+        "innerRadius": 218,
+        "outerRadius": 250,
+        "seedFile": "02_solar_bands-seed.png",
+        "seedSourceSeconds": 37
+      }
+    },
+    {
+      "id": "03_aurora_ribbon",
+      "name": "Aurora Ribbon",
+      "description": "청보라 리본과 밝은 테두리",
+      "referenceSeconds": [
+        50,
+        75
+      ],
+      "metal": "metal/03_aurora_ribbon.metal",
+      "isf": "isf/03_aurora_ribbon.fs",
+      "computeFunction": "orbit_aurora_ribbon_compute",
+      "fragmentFunction": "orbit_aurora_ribbon_fragment",
+      "defaults": {
+        "outputWidth": 1280,
+        "outputHeight": 720,
+        "viewMode": 1,
+        "phaseTime": 0,
+        "density": 0.4,
+        "turbulence": 0.4,
+        "energy": 0.62,
+        "hueShift": 0,
+        "brightness": 1,
+        "seed": 3,
+        "angleOffset": 0,
+        "flipU": 0,
+        "flipV": 0,
+        "ringWidth": 0.128,
+        "testPattern": 0,
+        "markerWidth": 12,
+        "coverage": 1.0,
+        "gapSoftness": 0.8,
+        "gapMotion": 0.25,
+        "fragmentation": 0.0
+      },
+      "defaultClockSpeed": 1.0,
+      "sensorMappingEnabled": true,
+      "testScene": false,
+      "referenceImage": null,
+      "texture": {
+        "file": "03_aurora_ribbon.mp4",
+        "kind": "video",
+        "width": 2048,
+        "height": 96,
+        "fps": 24,
+        "frames": 552,
+        "duration": 23,
+        "sourceStart": 51,
+        "sourceEnd": 74,
+        "center": [
+          640,
+          360
+        ],
+        "innerRadius": 218,
+        "outerRadius": 250,
+        "seedFile": "03_aurora_ribbon-seed.png",
+        "seedSourceSeconds": 56
+      }
+    },
+    {
+      "id": "04_electric_corona",
+      "name": "Electric Corona",
+      "description": "청백색 코로나",
+      "referenceSeconds": [
+        75,
+        105
+      ],
+      "metal": "metal/04_electric_corona.metal",
+      "isf": "isf/04_electric_corona.fs",
+      "computeFunction": "orbit_electric_corona_compute",
+      "fragmentFunction": "orbit_electric_corona_fragment",
+      "defaults": {
+        "outputWidth": 1280,
+        "outputHeight": 720,
+        "viewMode": 1,
+        "phaseTime": 0,
+        "density": 0.6,
+        "turbulence": 0.7,
+        "energy": 0.62,
+        "hueShift": 0,
+        "brightness": 1,
+        "seed": 3,
+        "angleOffset": 0,
+        "flipU": 0,
+        "flipV": 0,
+        "ringWidth": 0.128,
+        "testPattern": 0,
+        "markerWidth": 12,
+        "coverage": 1.0,
+        "gapSoftness": 0.8,
+        "gapMotion": 0.25,
+        "fragmentation": 0.0
+      },
+      "defaultClockSpeed": 1.0,
+      "sensorMappingEnabled": true,
+      "testScene": false,
+      "referenceImage": null,
+      "texture": {
+        "file": "04_electric_corona.mp4",
+        "kind": "video",
+        "width": 2048,
+        "height": 96,
+        "fps": 24,
+        "frames": 672,
+        "duration": 28,
+        "sourceStart": 76,
+        "sourceEnd": 104,
+        "center": [
+          640,
+          360
+        ],
+        "innerRadius": 218,
+        "outerRadius": 250,
+        "seedFile": "04_electric_corona-seed.png",
+        "seedSourceSeconds": 94
+      }
+    },
+    {
+      "id": "05_cyan_halo",
+      "name": "Cyan Halo",
+      "description": "청록색 헤일로",
+      "referenceSeconds": [
+        105,
+        127
+      ],
+      "metal": "metal/05_cyan_halo.metal",
+      "isf": "isf/05_cyan_halo.fs",
+      "computeFunction": "orbit_cyan_halo_compute",
+      "fragmentFunction": "orbit_cyan_halo_fragment",
+      "defaults": {
+        "outputWidth": 1280,
+        "outputHeight": 720,
+        "viewMode": 1,
+        "phaseTime": 0,
+        "density": 0.32,
+        "turbulence": 0.4,
+        "energy": 0.65,
+        "hueShift": 0,
+        "brightness": 1,
+        "seed": 3,
+        "angleOffset": 0,
+        "flipU": 0,
+        "flipV": 0,
+        "ringWidth": 0.128,
+        "testPattern": 0,
+        "markerWidth": 12,
+        "coverage": 1.0,
+        "gapSoftness": 0.8,
+        "gapMotion": 0.25,
+        "fragmentation": 0.0
+      },
+      "defaultClockSpeed": 1.0,
+      "sensorMappingEnabled": true,
+      "testScene": false,
+      "referenceImage": null,
+      "texture": {
+        "file": "05_cyan_halo.mp4",
+        "kind": "video",
+        "width": 2048,
+        "height": 96,
+        "fps": 24,
+        "frames": 480,
+        "duration": 20,
+        "sourceStart": 106,
+        "sourceEnd": 126,
+        "center": [
+          640,
+          360
+        ],
+        "innerRadius": 218,
+        "outerRadius": 250,
+        "seedFile": "05_cyan_halo-seed.png",
+        "seedSourceSeconds": 115
+      }
+    },
+    {
+      "id": "06_calibration",
+      "name": "Calibration",
+      "description": "LED 테스트 패턴",
+      "referenceSeconds": null,
+      "metal": "metal/06_calibration.metal",
+      "isf": "isf/06_calibration.fs",
+      "computeFunction": "orbit_calibration_compute",
+      "fragmentFunction": "orbit_calibration_fragment",
+      "defaults": {
+        "outputWidth": 1280,
+        "outputHeight": 720,
+        "viewMode": 1,
+        "phaseTime": 0,
+        "density": 0.5,
+        "turbulence": 0.5,
+        "energy": 0.5,
+        "hueShift": 0,
+        "brightness": 1,
+        "seed": 3,
+        "angleOffset": 0,
+        "flipU": 0,
+        "flipV": 0,
+        "ringWidth": 0.128,
+        "testPattern": 0,
+        "markerWidth": 12,
+        "coverage": 1.0,
+        "gapSoftness": 0.0,
+        "gapMotion": 0.0,
+        "fragmentation": 0.0
+      },
+      "defaultClockSpeed": 1.0,
+      "sensorMappingEnabled": false,
+      "testScene": true,
+      "referenceImage": null,
+      "texture": null
+    },
+    {
+      "id": "07_spectral_fragments",
+      "name": "Spectral Fragments",
+      "description": "나타나고 사라지는 빛 조각",
+      "referenceSeconds": null,
+      "metal": "metal/07_spectral_fragments.metal",
+      "isf": "isf/07_spectral_fragments.fs",
+      "computeFunction": "orbit_spectral_fragments_compute",
+      "fragmentFunction": "orbit_spectral_fragments_fragment",
+      "defaults": {
+        "outputWidth": 1280,
+        "outputHeight": 720,
+        "viewMode": 1,
+        "phaseTime": 0,
+        "density": 0.55,
+        "turbulence": 0.45,
+        "energy": 0.6,
+        "hueShift": 0,
+        "brightness": 1,
+        "seed": 3,
+        "angleOffset": 0,
+        "flipU": 0,
+        "flipV": 0,
+        "ringWidth": 0.128,
+        "testPattern": 0,
+        "markerWidth": 12,
+        "coverage": 1.0,
+        "gapSoftness": 0.25,
+        "gapMotion": 0.35,
+        "fragmentation": 0.0
+      },
+      "defaultClockSpeed": 0.7,
+      "sensorMappingEnabled": true,
+      "testScene": false,
+      "referenceImage": "spectral-fragments-reference",
+      "texture": {
+        "file": "07_spectral_fragments.png",
+        "kind": "image",
+        "width": 2048,
+        "height": 96,
+        "fps": 0,
+        "frames": 1,
+        "duration": 0,
+        "sourceStart": 0,
+        "sourceEnd": 0,
+        "center": [
+          316,
+          242
+        ],
+        "innerRadius": 147,
+        "outerRadius": 169,
+        "seedFile": "07_spectral_fragments.png"
+      }
+    },
+    {
+      "id": "08_golden_drift",
+      "name": "Golden Drift",
+      "description": "금빛 입자와 사라지는 꼬리",
+      "referenceSeconds": null,
+      "metal": "metal/08_golden_drift.metal",
+      "isf": "isf/08_golden_drift.fs",
+      "computeFunction": "orbit_golden_drift_compute",
+      "fragmentFunction": "orbit_golden_drift_fragment",
+      "defaults": {
+        "outputWidth": 1280,
+        "outputHeight": 720,
+        "viewMode": 1,
+        "phaseTime": 0,
+        "density": 0.45,
+        "turbulence": 0.4,
+        "energy": 0.65,
+        "hueShift": 0,
+        "brightness": 1,
+        "seed": 3,
+        "angleOffset": 0,
+        "flipU": 0,
+        "flipV": 0,
+        "ringWidth": 0.128,
+        "testPattern": 0,
+        "markerWidth": 12,
+        "coverage": 0.76,
+        "gapSoftness": 0.95,
+        "gapMotion": 0.24,
+        "fragmentation": 0.03
+      },
+      "defaultClockSpeed": 0.65,
+      "sensorMappingEnabled": true,
+      "testScene": false,
+      "referenceImage": "golden-drift-reference",
+      "texture": {
+        "file": "08_golden_drift.png",
+        "kind": "image",
+        "width": 2048,
+        "height": 96,
+        "fps": 0,
+        "frames": 1,
+        "duration": 0,
+        "sourceStart": 0,
+        "sourceEnd": 0,
+        "center": [
+          316,
+          239
+        ],
+        "innerRadius": 147,
+        "outerRadius": 171,
+        "seedFile": "08_golden_drift.png"
+      }
+    }
+  ]
+}

@@ -1,0 +1,280 @@
+{
+  "schemaVersion": 1,
+  "status": "example bindings; application must implement OSC receiving and smoothing",
+  "osc": {
+    "bindAddress": "0.0.0.0",
+    "udpPort": 9000,
+    "expectedIntervalSeconds": 30,
+    "staleAfterSeconds": 90
+  },
+  "sensors": [
+    {
+      "id": "racing_speed",
+      "address": "/park/racing/speed",
+      "argument": 0,
+      "type": "float",
+      "range": [
+        0,
+        100
+      ]
+    },
+    {
+      "id": "visitors",
+      "address": "/park/visitors",
+      "argument": 0,
+      "type": "int",
+      "range": [
+        0,
+        500
+      ]
+    }
+  ],
+  "scenes": {
+    "01_chroma_flow": [
+      {
+        "sensor": "racing_speed",
+        "target": "clock.speed",
+        "outputRange": [
+          0.25,
+          1.5
+        ],
+        "clamp": true,
+        "smoothingSeconds": 8,
+        "staleTarget": 1.0
+      },
+      {
+        "sensor": "visitors",
+        "target": "uniform.density",
+        "outputRange": [
+          0.2,
+          0.85
+        ],
+        "clamp": true,
+        "smoothingSeconds": 12,
+        "staleTarget": 0.48
+      },
+      {
+        "sensor": "racing_speed",
+        "target": "uniform.energy",
+        "outputRange": [
+          0.35,
+          0.85
+        ],
+        "clamp": true,
+        "smoothingSeconds": 8,
+        "staleTarget": 0.52
+      }
+    ],
+    "02_solar_bands": [
+      {
+        "sensor": "racing_speed",
+        "target": "clock.speed",
+        "outputRange": [
+          0.25,
+          1.5
+        ],
+        "clamp": true,
+        "smoothingSeconds": 8,
+        "staleTarget": 1.0
+      },
+      {
+        "sensor": "visitors",
+        "target": "uniform.density",
+        "outputRange": [
+          0.2,
+          0.85
+        ],
+        "clamp": true,
+        "smoothingSeconds": 12,
+        "staleTarget": 0.62
+      },
+      {
+        "sensor": "racing_speed",
+        "target": "uniform.energy",
+        "outputRange": [
+          0.35,
+          0.85
+        ],
+        "clamp": true,
+        "smoothingSeconds": 8,
+        "staleTarget": 0.62
+      }
+    ],
+    "03_aurora_ribbon": [
+      {
+        "sensor": "racing_speed",
+        "target": "clock.speed",
+        "outputRange": [
+          0.25,
+          1.5
+        ],
+        "clamp": true,
+        "smoothingSeconds": 8,
+        "staleTarget": 1.0
+      },
+      {
+        "sensor": "visitors",
+        "target": "uniform.density",
+        "outputRange": [
+          0.2,
+          0.85
+        ],
+        "clamp": true,
+        "smoothingSeconds": 12,
+        "staleTarget": 0.4
+      },
+      {
+        "sensor": "racing_speed",
+        "target": "uniform.energy",
+        "outputRange": [
+          0.35,
+          0.85
+        ],
+        "clamp": true,
+        "smoothingSeconds": 8,
+        "staleTarget": 0.62
+      }
+    ],
+    "04_electric_corona": [
+      {
+        "sensor": "racing_speed",
+        "target": "clock.speed",
+        "outputRange": [
+          0.25,
+          1.5
+        ],
+        "clamp": true,
+        "smoothingSeconds": 8,
+        "staleTarget": 1.0
+      },
+      {
+        "sensor": "visitors",
+        "target": "uniform.density",
+        "outputRange": [
+          0.2,
+          0.85
+        ],
+        "clamp": true,
+        "smoothingSeconds": 12,
+        "staleTarget": 0.6
+      },
+      {
+        "sensor": "racing_speed",
+        "target": "uniform.energy",
+        "outputRange": [
+          0.35,
+          0.85
+        ],
+        "clamp": true,
+        "smoothingSeconds": 8,
+        "staleTarget": 0.62
+      }
+    ],
+    "05_cyan_halo": [
+      {
+        "sensor": "racing_speed",
+        "target": "clock.speed",
+        "outputRange": [
+          0.25,
+          1.5
+        ],
+        "clamp": true,
+        "smoothingSeconds": 8,
+        "staleTarget": 1.0
+      },
+      {
+        "sensor": "visitors",
+        "target": "uniform.density",
+        "outputRange": [
+          0.2,
+          0.85
+        ],
+        "clamp": true,
+        "smoothingSeconds": 12,
+        "staleTarget": 0.32
+      },
+      {
+        "sensor": "racing_speed",
+        "target": "uniform.energy",
+        "outputRange": [
+          0.35,
+          0.85
+        ],
+        "clamp": true,
+        "smoothingSeconds": 8,
+        "staleTarget": 0.65
+      }
+    ],
+    "06_calibration": [],
+    "07_spectral_fragments": [
+      {
+        "sensor": "racing_speed",
+        "target": "clock.speed",
+        "outputRange": [
+          0.25,
+          1.5
+        ],
+        "clamp": true,
+        "smoothingSeconds": 8,
+        "staleTarget": 0.7
+      },
+      {
+        "sensor": "visitors",
+        "target": "uniform.density",
+        "outputRange": [
+          0.2,
+          0.85
+        ],
+        "clamp": true,
+        "smoothingSeconds": 12,
+        "staleTarget": 0.55
+      },
+      {
+        "sensor": "racing_speed",
+        "target": "uniform.energy",
+        "outputRange": [
+          0.35,
+          0.85
+        ],
+        "clamp": true,
+        "smoothingSeconds": 8,
+        "staleTarget": 0.6
+      }
+    ],
+    "08_golden_drift": [
+      {
+        "sensor": "racing_speed",
+        "target": "clock.speed",
+        "outputRange": [
+          0.25,
+          1.5
+        ],
+        "clamp": true,
+        "smoothingSeconds": 8,
+        "staleTarget": 0.65
+      },
+      {
+        "sensor": "visitors",
+        "target": "uniform.density",
+        "outputRange": [
+          0.2,
+          0.85
+        ],
+        "clamp": true,
+        "smoothingSeconds": 12,
+        "staleTarget": 0.45
+      },
+      {
+        "sensor": "racing_speed",
+        "target": "uniform.energy",
+        "outputRange": [
+          0.35,
+          0.85
+        ],
+        "clamp": true,
+        "smoothingSeconds": 8,
+        "staleTarget": 0.65
+      }
+    ]
+  }
+}
