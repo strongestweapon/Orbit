@@ -39,7 +39,7 @@ struct ContentView: View {
                             .overlay(Rectangle().stroke(model.outputActive ? .red : Color.white.opacity(0.12),lineWidth:model.outputActive ? 2 : 1))
                     }
                     VStack(alignment:.leading,spacing:5) {
-                        caption("4K 출력",trailing:"3840 × 2160")
+                        caption("출력 · 16:9",trailing:model.outputSizeLabel)
                         OrbitMetalView(model:model,mode:2).frame(width:100,height:56.25)
                     }.frame(width:150)
                 }.frame(height:72)
@@ -54,7 +54,6 @@ struct ContentView: View {
         .sheet(item:$panel) { selected in
             OrbitSettingsPanel(model:model,panel:selected) { panel=nil }
         }
-        .onChange(of:model.selectedDisplayID) { _,_ in model.stopOutput() }
         .alert("Orbit",isPresented:Binding(get:{model.errorMessage != nil},set:{if !$0 {model.errorMessage=nil}})) {
             Button("확인",role:.cancel){model.errorMessage=nil}
         } message:{Text(model.errorMessage ?? "")}
@@ -77,9 +76,12 @@ struct ContentView: View {
             Circle().fill(model.outputActive ? .red : .gray).frame(width:7,height:7)
             Text(model.outputStatus).font(.system(size:10)).lineLimit(1)
             Button {panel = .output} label:{Label("출력 설정",systemImage:"display")}.accessibilityIdentifier("openOutput")
-            Button(model.outputActive ? "출력 중지" : "출력 시작") {
-                if model.outputActive {model.stopOutput()}
-                else if model.selectedDisplayID==0 {panel = .output}
+            if model.outputOpen {
+                Button {model.toggleOutputFullscreen()} label:{Image(systemName:model.outputFullscreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")}
+                    .help(model.outputFullscreen ? "출력 창 모드" : "출력 전체화면").accessibilityIdentifier("toggleOutputFullscreen")
+            }
+            Button(model.outputOpen ? "출력 중지" : "출력 시작") {
+                if model.outputOpen {model.stopOutput()}
                 else {model.startOutput()}
             }.buttonStyle(.borderedProminent).tint(model.outputActive ? .red : orbitAccent)
         }.padding(.horizontal,18).frame(height:58)
@@ -285,18 +287,41 @@ private struct OrbitSettingsPanel: View {
         }.font(.system(size:12)).textFieldStyle(.roundedBorder)
     }
     private var output:some View {
-        VStack(alignment:.leading,spacing:18) {
-            Picker("출력 설정",selection:$tab){Text("디스플레이").tag(0);Text("링 방향 · 테스트").tag(1)}.pickerStyle(.segmented)
+        VStack(alignment:.leading,spacing:12) {
+            Picker("출력 설정",selection:$tab){Text("디스플레이 · 크기").tag(0);Text("링 방향 · 테스트").tag(1)}.pickerStyle(.segmented)
             if tab==0 {
                 Picker("출력 모니터",selection:$model.selectedDisplayID) {
-                    Text("디스플레이 선택").tag(UInt32(0))
+                    Text("현재 화면 (자동)").tag(UInt32(0))
                     ForEach(model.displays){Text("\($0.name) · \($0.pixels)").tag($0.id)}
+                }.accessibilityIdentifier("outputDisplay")
+                Picker("영상 해상도",selection:$model.outputResolution) {
+                    ForEach(OutputResolution.allCases){Text($0.label).tag($0)}
+                }.accessibilityIdentifier("outputResolution")
+                if model.outputResolution == .custom {
+                    HStack {
+                        Text("가로")
+                        TextField("1920",value:$model.customOutputWidth,format:.number.grouping(.never))
+                            .frame(width:90).textFieldStyle(.roundedBorder)
+                            .onSubmit {model.normalizeOutputWidth()}.accessibilityIdentifier("customOutputWidth")
+                        Text("× \(model.customOutputHeight) · 16:9").monospacedDigit()
+                        Spacer()
+                        Text("320–7680 px · 16 px 단위").font(.system(size:10)).foregroundStyle(.secondary)
+                    }
                 }
-                HStack {Text(model.outputStatus);Spacer();Button(model.outputActive ? "출력 중지" : "출력 시작"){if model.outputActive {model.stopOutput()} else {model.startOutput()}}.buttonStyle(.borderedProminent)}
+                HStack {
+                    Text(model.outputStatus).lineLimit(1);Spacer()
+                    Button(model.outputFullscreen ? "창 모드" : "전체화면"){model.toggleOutputFullscreen()}
+                        .disabled(!model.outputOpen).accessibilityIdentifier("outputSettingsFullscreen")
+                    Button(model.outputOpen ? "출력 중지" : "출력 시작") {
+                        if model.outputOpen {model.stopOutput()} else {model.startOutput()}
+                    }.buttonStyle(.borderedProminent).accessibilityIdentifier("outputSettingsStartStop")
+                }
                 Divider()
-                Text("3840 × 2160").font(.system(size:25,weight:.medium,design:.monospaced))
-                Text("3564 × 300 네 줄 + 1188 × 300 한 줄\n사용하지 않는 영역은 검정으로 출력합니다.").foregroundStyle(.secondary)
-                Text("출력 프레임이 표시되면 운영 화면에 빨간 테두리가 켜집니다.").font(.system(size:11)).foregroundStyle(.secondary)
+                Text(model.outputSizeLabel).font(.system(size:24,weight:.medium,design:.monospaced))
+                Text("출력은 별도 창으로 열립니다. 전체화면은 그 창이 있는 모니터에 맞춰 확대합니다. 자동 해상도는 창 크기와 화면에 맞춰 바뀝니다.")
+                    .foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
+                Text("항상 16:9 유지 · 남는 영역은 검정\nLED 원본 배치: 3840 × 2160 (1:1 픽셀 확인은 4K 선택)")
+                    .font(.system(size:10)).foregroundStyle(.secondary)
             } else {
                 parameter("링 시작점","angleOffset")
                 Toggle("진행 방향 반전",isOn:boolBinding("flipU"))

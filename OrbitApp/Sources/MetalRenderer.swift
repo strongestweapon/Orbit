@@ -36,7 +36,7 @@ final class OrbitMTKView: MTKView {
 struct OrbitMetalView: NSViewRepresentable {
     let model: OrbitModel
     let mode: Float
-    static func make(model: OrbitModel, mode: Float, isOutput: Bool = false) -> OrbitMTKView {
+    static func make(model: OrbitModel, mode: Float, isOutput: Bool = false, outputSession: UUID? = nil) -> OrbitMTKView {
         let view = OrbitMTKView(frame: .zero, device: OrbitGPU.shared.device)
         view.colorPixelFormat = .bgra8Unorm
         view.colorspace = CGColorSpace(name: CGColorSpace.sRGB)
@@ -44,7 +44,7 @@ struct OrbitMetalView: NSViewRepresentable {
         view.preferredFramesPerSecond = 60
         view.framebufferOnly = true
         view.enableSetNeedsDisplay = false
-        let renderer = OrbitRenderer(model: model, mode: mode, isOutput: isOutput)
+        let renderer = OrbitRenderer(model: model, mode: mode, isOutput: isOutput, outputSession: outputSession)
         view.renderer = renderer
         view.delegate = renderer
         return view
@@ -60,13 +60,15 @@ final class OrbitRenderer: NSObject, MTKViewDelegate {
     private weak var model: OrbitModel?
     private let mode: Float
     private let isOutput: Bool
+    private let outputSession: UUID?
     private var failedScene: String?
-    init(model: OrbitModel, mode: Float, isOutput: Bool) {
-        self.model = model; self.mode = mode; self.isOutput = isOutput
+    init(model: OrbitModel, mode: Float, isOutput: Bool, outputSession: UUID? = nil) {
+        self.model = model; self.mode = mode; self.isOutput = isOutput; self.outputSession = outputSession
     }
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
     func draw(in view: MTKView) {
-        guard let model, let scene = model.selectedScene, failedScene != scene.id,
+        guard view.drawableSize.width > 0, view.drawableSize.height > 0,
+              let model, let scene = model.selectedScene, failedScene != scene.id,
               let descriptor = view.currentRenderPassDescriptor, let drawable = view.currentDrawable,
               let command = OrbitGPU.shared.queue?.makeCommandBuffer() else { return }
         do {
@@ -89,9 +91,9 @@ final class OrbitRenderer: NSObject, MTKViewDelegate {
             }
             encoder.endEncoding()
             if isOutput || mode == 1 {
-                let output = isOutput
+                let output = isOutput; let session = outputSession
                 drawable.addPresentedHandler { [weak model] _ in
-                    DispatchQueue.main.async { model?.framePresented(output: output) }
+                    DispatchQueue.main.async { model?.framePresented(output: output, outputSession: session) }
                 }
             }
             command.present(drawable)

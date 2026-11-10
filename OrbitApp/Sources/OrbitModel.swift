@@ -47,6 +47,8 @@ struct StoredSettings: Codable {
     var port: String
     var motionRevision: Int?
     var rendererRevision: Int?
+    var outputResolution: OutputResolution?
+    var customOutputWidth: Int?
 }
 struct OutputDisplay: Identifiable {
     let id: UInt32
@@ -78,6 +80,12 @@ final class OrbitModel: ObservableObject {
     @Published var displays: [OutputDisplay] = []
     @Published var selectedDisplayID: UInt32 = 0
     @Published var outputActive = false
+    @Published private(set) var outputOpen = false
+    @Published private(set) var outputFullscreen = false
+    @Published private(set) var outputRenderSize: CGSize = .zero
+    @Published private(set) var outputScreenName = ""
+    @Published var outputResolution: OutputResolution = .automatic
+    @Published var customOutputWidth: Int = 1920
     @Published var outputStatus = "출력 꺼짐"
     @Published var fps: Double = 0
     @Published var textureStatus = "텍스처 준비 중"
@@ -87,7 +95,7 @@ final class OrbitModel: ObservableObject {
     private var phaseTime: Double = 0
     private var lastTime = CACurrentMediaTime()
     private var smoothedValues: [String: Float] = [:]
-    private var outputWindow: NSWindow?
+    private var outputController: OrbitOutputWindowController?
     private var outputPresentationTime: CFTimeInterval = 0
     private var frameCount = 0
     private var fpsTime = CACurrentMediaTime()
@@ -119,7 +127,14 @@ final class OrbitModel: ObservableObject {
         }
         return values
     }
-    var outputName: String { displays.first { $0.id == selectedDisplayID }?.name ?? "선택 안 함" }
+    var outputName: String { outputOpen ? outputScreenName : (displays.first { $0.id == selectedDisplayID }?.name ?? "현재 화면") }
+    var outputSizeLabel: String {
+        if outputOpen, outputRenderSize.width > 0 { return OutputGeometry.label(outputRenderSize) }
+        if outputResolution == .automatic { return "자동 · 16:9" }
+        return OutputGeometry.label(outputResolution.size(availablePixels: .zero, customWidth: customOutputWidth))
+    }
+    var customOutputHeight: Int { OutputGeometry.normalizedWidth(customOutputWidth)/16*9 }
+    func normalizeOutputWidth() { customOutputWidth = OutputGeometry.normalizedWidth(customOutputWidth) }
 
     init() {
         do {
@@ -159,6 +174,8 @@ final class OrbitModel: ObservableObject {
                     }
                 }
                 port = stored.port
+                outputResolution = stored.outputResolution ?? .automatic
+                customOutputWidth = OutputGeometry.normalizedWidth(stored.customOutputWidth ?? 1920)
             }
         } catch { errorMessage = error.localizedDescription }
         textureSource?.onReady = { [weak self] in self?.textureStatus = "텍스처 재생 준비됨" }
@@ -171,16 +188,24 @@ final class OrbitModel: ObservableObject {
         heartbeat = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             guard let self else { return }
             let now = CACurrentMediaTime()
-            if self.outputWindow != nil && now - self.outputPresentationTime > 1 {
+            if self.outputController != nil && now - self.outputPresentationTime > 1 {
                 self.outputActive = false; self.outputStatus = "출력 프레임 대기"
             }
         }
         $settings.dropFirst().debounce(for: .milliseconds(400), scheduler: RunLoop.main).sink { [weak self] _ in self?.save() }.store(in: &saves)
         $sensors.dropFirst().debounce(for: .milliseconds(400), scheduler: RunLoop.main).sink { [weak self] _ in self?.save() }.store(in: &saves)
+        $outputResolution.combineLatest($customOutputWidth).dropFirst()
+            .sink { [weak self] resolution,width in
+                self?.outputController?.configure(resolution: resolution, customWidth: width)
+            }.store(in: &saves)
+        $outputResolution.combineLatest($customOutputWidth).dropFirst()
+            .debounce(for: .milliseconds(400), scheduler: RunLoop.main)
+            .sink { [weak self] _ in self?.save() }.store(in: &saves)
+        $selectedDisplayID.dropFirst().removeDuplicates().sink { [weak self] _ in self?.stopOutput() }.store(in: &saves)
     }
 
     func save() {
-        let data = try? JSONEncoder().encode(StoredSettings(sensors: sensors, scenes: settings, port: port, motionRevision: 2, rendererRevision: 3))
+        let data = try? JSONEncoder().encode(StoredSettings(sensors: sensors, scenes: settings, port: port, motionRevision: 2, rendererRevision: 3, outputResolution: outputResolution, customOutputWidth: customOutputWidth))
         if let data { UserDefaults.standard.set(data, forKey: "OrbitSettings.v1") }
     }
     func value(_ name: String) -> Float { effectiveValues[name] ?? 0 }
@@ -295,13 +320,15 @@ final class OrbitModel: ObservableObject {
         // Pure code generation and optional reference playback share the 80-byte ABI.
         return [width,height,view,Float(phaseTime)] + names.map { values[$0] ?? 0 }
     }
-    func framePresented(output: Bool) {
+    func framePresented(output: Bool, outputSession: UUID? = nil) {
+        if output && outputController?.sessionID != outputSession { return }
+        if output && outputController == nil { return }
         // Report the rendered content clock, not a separate wall-clock animation.
         // Pausing or speed zero holds this value along with the shader image.
         if abs(playbackSeconds-phaseTime) >= 0.1 { playbackSeconds = phaseTime }
         if output {
             outputPresentationTime = CACurrentMediaTime()
-            if outputWindow != nil && !outputActive { outputActive = true; outputStatus = "LIVE · \(outputName)" }
+            if outputController != nil && !outputActive { outputActive = true; outputStatus = "LIVE · \(outputName)" }
         } else {
             frameCount += 1
             let now = CACurrentMediaTime()
@@ -315,31 +342,47 @@ final class OrbitModel: ObservableObject {
             return OutputDisplay(id: id, name: screen.localizedName,
               pixels: "\(CGDisplayPixelsWide(id)) × \(CGDisplayPixelsHigh(id))", isMain: screen == NSScreen.main)
         }
-        if selectedDisplayID == 0 { selectedDisplayID = displays.first(where: { !$0.isMain })?.id ?? 0 }
         if selectedDisplayID != 0 && !displays.contains(where: { $0.id == selectedDisplayID }) {
-            stopOutput(); selectedDisplayID = 0; outputStatus = "디스플레이 연결 해제"
+            stopOutput(); selectedDisplayID = 0; outputStatus = "디스플레이 연결 해제 · 현재 화면 사용 가능"
         }
     }
     func startOutput() {
         stopOutput()
-        guard let screen = NSScreen.screens.first(where: {
+        let currentScreen = NSApp.keyWindow?.screen ?? NSApp.mainWindow?.screen ?? NSScreen.main
+        let screen = selectedDisplayID == 0 ? currentScreen : NSScreen.screens.first(where: {
             ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value == selectedDisplayID
-        }) else { errorMessage = "출력 디스플레이를 선택하세요."; return }
-        let width = CGDisplayPixelsWide(selectedDisplayID), height = CGDisplayPixelsHigh(selectedDisplayID)
-        guard width == 3840 && height == 2160 else {
-            errorMessage = "정확한 LED 픽셀 매핑을 위해 출력 화면을 3840×2160으로 설정하세요. 현재: \(width)×\(height)"; return
-        }
-        let window = NSWindow(contentRect: screen.frame, styleMask: .borderless, backing: .buffered, defer: false, screen: screen)
-        window.level = .floating; window.backgroundColor = .black; window.isReleasedWhenClosed = false
-        let view = OrbitMetalView.make(model: self, mode: 2, isOutput: true)
-        view.autoresizingMask = [.width,.height]; window.contentView = view
-        view.autoResizeDrawable = false; view.drawableSize = CGSize(width: 3840,height: 2160)
-        window.setFrame(screen.frame, display: true); outputWindow = window
+        })
+        guard let screen else { errorMessage = "출력할 화면을 찾을 수 없습니다."; return }
+        let controller = OrbitOutputWindowController(model: self, screen: screen,
+                            resolution: outputResolution, customWidth: customOutputWidth)
+        let session = controller.sessionID
+        outputController = controller
+        outputOpen = true; outputFullscreen = false
+        outputScreenName = screen.localizedName
         outputStatus = "출력 프레임 대기"; outputPresentationTime = CACurrentMediaTime()
-        window.orderFrontRegardless()
+        controller.closed = { [weak self] in
+            guard self?.outputController?.sessionID == session else { return }
+            self?.outputController = nil; self?.clearOutputState()
+        }
+        controller.changed = { [weak self] fullscreen,name,size in
+            // Geometry callbacks originate in AppKit layout. Publish after that layout finishes.
+            DispatchQueue.main.async {
+                guard let self, self.outputController?.sessionID == session else { return }
+                if self.outputFullscreen != fullscreen { self.outputFullscreen = fullscreen }
+                if self.outputScreenName != name { self.outputScreenName = name }
+                if self.outputRenderSize != size { self.outputRenderSize = size }
+                if self.outputActive { self.outputStatus = "LIVE · \(name)" }
+            }
+        }
+        controller.open()
     }
+    func toggleOutputFullscreen() { outputController?.toggleFullscreen() }
     func stopOutput() {
-        if let view = outputWindow?.contentView as? OrbitMTKView { view.isPaused = true; view.delegate = nil; view.renderer = nil }
-        outputWindow?.close(); outputWindow = nil; outputActive = false; outputStatus = "출력 꺼짐"
+        let controller = outputController; outputController = nil
+        controller?.shutdown(); clearOutputState()
+    }
+    private func clearOutputState() {
+        outputActive = false; outputOpen = false; outputFullscreen = false
+        outputRenderSize = .zero; outputScreenName = ""; outputStatus = "출력 꺼짐"
     }
 }
