@@ -169,14 +169,6 @@
       "DEFAULT": 1,
       "MIN": 0,
       "MAX": 3
-    },
-    {
-      "NAME": "rippleDepth",
-      "LABEL": "물결 굴곡",
-      "TYPE": "float",
-      "DEFAULT": 0.4,
-      "MIN": 0,
-      "MAX": 1
     }
   ]
 }*/
@@ -331,7 +323,7 @@ void main() {
     p.viewMode = float(viewMode);
     p.phaseTime = externalClock ? clockSeconds : TIME * speed;
     p.density = particleDensity;
-    p.turbulence = rippleDepth;
+    p.turbulence = 0.4;
     p.energy = headGlow;
     p.hueShift = hueShift;
     p.brightness = brightness;

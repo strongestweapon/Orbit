@@ -8,7 +8,7 @@ private enum OrbitPanel: String, Identifiable {
     case look, sensors, output
     var id: String { rawValue }
     var title: String {
-        switch self { case .look:return "씬 연출";case .sensors:return "센서 입력";case .output:return "출력 설정" }
+        switch self { case .look:return "공통 조절";case .sensors:return "센서 입력";case .output:return "출력 설정" }
     }
 }
 
@@ -47,7 +47,7 @@ struct ContentView: View {
                 }.frame(height:72)
             }.padding(.horizontal,18).padding(.bottom,12)
             Divider()
-            quickControls
+            sceneControls
             Divider()
             sensorStrip
             footer
@@ -131,26 +131,39 @@ struct ContentView: View {
             }.frame(maxWidth:.infinity)
         }
     }
-    private var quickControls: some View {
-        HStack(spacing:24) {
+    private var sceneControls: some View {
+        VStack(alignment:.leading,spacing:10) {
+            HStack(spacing:10) {
+                Text(model.selectedScene?.testScene == true ? "LED TEST" : (model.usesTexture ? "원본 재생 조절" : "\(model.selectedScene?.name ?? "") · 파라미터 \(model.shaderParameters.count)개"))
+                    .font(.system(size:11,weight:.semibold)).accessibilityIdentifier("sceneParameterCount")
+                Spacer()
+                Button {panel = .look} label:{Label(model.usesTexture ? "원본 조절" : "공통 조절",systemImage:"slider.horizontal.3")}
+                    .disabled(model.selectedScene?.testScene == true).accessibilityIdentifier("openLook")
+                Toggle("제어 출력 \(model.activeControlOutputCount)",isOn:$model.controlOutputEnabled)
+                    .toggleStyle(.switch).controlSize(.small).fixedSize().accessibilityIdentifier("controlOutputToggle")
+                    .help("각 파라미터 옆 연결 버튼에서 입력·출력을 설정하세요.")
+            }.frame(height:22)
             if model.selectedScene?.testScene == true {
-                PatternPicker(model:model).frame(width:225)
+                HStack(spacing:24) {
+                    PatternPicker(model:model).frame(width:225)
+                    MappedParameterSlider(model:model,key:"brightness",title:"밝기").frame(width:200)
+                    Spacer()
+                }
+            } else if model.usesTexture {
+                HStack(spacing:24) {
+                    MappedParameterSlider(model:model,key:"speed",title:"재생 속도",range:0...3,suffix:"×")
+                    MappedParameterSlider(model:model,key:"brightness",title:"밝기")
+                    MappedParameterSlider(model:model,key:"energy",title:"발광")
+                }
             } else {
-                MappedParameterSlider(model:model,key:"speed",title:"속도",range:0...3,suffix:"×").frame(width:145)
+                LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:24),count:min(4,max(1,model.shaderParameters.count))),spacing:12) {
+                    ForEach(model.shaderParameters) { control in
+                        MappedParameterSlider(model:model,key:control.id,title:control.title,
+                                              range:control.minimum...control.maximum,suffix:control.unit)
+                    }
+                }.id(model.selectedSceneID)
             }
-            MappedParameterSlider(model:model,key:"brightness",title:"밝기").frame(width:145)
-            if model.selectedScene?.testScene == false {
-                let control = model.quickParameter
-                MappedParameterSlider(model:model,key:control.id,title:model.usesTexture ? "발광" : control.title,
-                                      range:control.range,suffix:control.unit).frame(width:170)
-            }
-            Spacer(minLength:0)
-            Button {panel = .look} label:{Label("씬 연출",systemImage:"slider.horizontal.3")}
-                .disabled(model.selectedScene?.testScene == true).accessibilityIdentifier("openLook")
-            Toggle("제어 출력 \(model.activeControlOutputCount)",isOn:$model.controlOutputEnabled)
-                .toggleStyle(.switch).controlSize(.small).fixedSize().accessibilityIdentifier("controlOutputToggle")
-                .help("각 파라미터 옆 연결 버튼에서 입력·출력을 설정하세요.")
-        }.padding(.horizontal,20).frame(height:70).background(orbitPanel)
+        }.padding(.horizontal,20).padding(.vertical,12).background(orbitPanel)
     }
     private var sensorStrip: some View {
         HStack(spacing:14) {
@@ -177,6 +190,7 @@ struct ContentView: View {
             Text(model.usesTexture ? "추출 원본 재생" : "실시간 코드 생성 · 이미지/영상 텍스처 없음")
             Spacer()
             Text(model.controlOutputEnabled ? model.controlOutputStatus : model.lastMessage).lineLimit(1)
+            Text("v"+(Bundle.main.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String ?? ""))
             Text("Metal · \(Int(model.fps.rounded())) fps").frame(width:105,alignment:.trailing).monospacedDigit()
         }.font(.system(size:9,design:.monospaced)).foregroundStyle(.secondary).padding(.horizontal,20).frame(height:23).background(orbitPanel)
     }
@@ -218,23 +232,29 @@ private struct OrbitSettingsPanel: View {
     }
     private var shaderLook:some View {
         VStack(alignment:.leading,spacing:15) {
-            Picker("연출 설정",selection:$tab) {
-                Text("형태").tag(0);Text("질감 · 색").tag(1);Text("빛 · 소멸").tag(2)
+            Picker("공통 조절",selection:$tab) {
+                Text("재생 · 색").tag(0);Text("빛 · 소멸").tag(1)
+                if !model.connectedCompatibilityParameters.isEmpty {Text("기존 연결").tag(2)}
             }.pickerStyle(.segmented)
-            if tab < 2 {
-                ForEach(model.shaderParameters.filter { $0.group == tab }) { control in
-                    parameter(control.title,control.id,range:control.minimum...control.maximum)
-                }
-                if tab == 1 {parameter("색상 이동","hueShift",range:-0.5...0.5)}
-                Text("\(model.selectedScene?.name ?? "") 전용 조절 · 이름에 마우스를 올리면 설명 · 연결 버튼으로 개별 입력 / 출력")
-                    .font(.system(size:10)).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
-            } else {
+            if tab == 0 {
+                parameter("전체 재생 속도","speed",range:0...3)
+                parameter("전체 밝기","brightness")
+                parameter("색상 이동","hueShift",range:-0.5...0.5)
+                Text("모든 씬에 공통인 재생·색 조절입니다. 씬 고유의 파라미터는 메인 화면에 모두 표시됩니다.")
+                    .font(.system(size:11)).foregroundStyle(.secondary)
+            } else if tab == 1 {
                 parameter("빛이 남는 범위","coverage")
                 parameter("소멸 경계 부드러움","gapSoftness")
                 parameter("빈 구간 이동","gapMotion")
                 parameter("조각화","fragmentation")
                 Text("링의 점등 범위와 빈 구간을 제어합니다. 범위 0은 전체 소등, 1은 전체 범위입니다.")
                     .font(.system(size:10)).foregroundStyle(.secondary)
+            } else {
+                ForEach(model.connectedCompatibilityParameters) { control in
+                    parameter(control.title,control.id,range:control.minimum...control.maximum)
+                }
+                Text("이전 버전에서 연결한 입력·출력을 유지합니다. 연결 버튼에서 확인하거나 해제할 수 있습니다.")
+                    .font(.system(size:11)).foregroundStyle(.secondary)
             }
         }
     }

@@ -36,6 +36,7 @@ vec3 orbitShade(vec2 uv, OrbitParams p) {
     vec3 colour = film*warm*skin*(0.88+0.12*field);
     colour = mix(colour,vec3(0.82,0.87,0.86)*skin*(0.76+0.24*orbitNoise(orbitCircle(u,0.0,190.0,t*0.08,p.seed+9.0))),pearl*(0.68+0.25*occupancy));
     colour *= 1.0-p.fragmentation*(1.0-occupancy)*0.85;
+    colour *= p.shape3; // Film mix affects the colour layer; bars remain independent.
     for (int layer=0; layer<3; layer++) {
         float l = float(layer);
         float count = layer==0 ? 173.0 : (layer==1 ? 389.0 : 857.0);

@@ -14,6 +14,8 @@ struct SceneDescriptor: Decodable, Identifiable {
     let referenceImage: String?
     let texture: TextureDescriptor?
     let parameters: [ShaderParameter]
+    let compatibilityParameters: [ShaderParameter]?
+    var allParameters: [ShaderParameter] { parameters + (compatibilityParameters ?? []) }
 }
 struct SceneManifest: Decodable { let scenes: [SceneDescriptor] }
 
@@ -97,13 +99,19 @@ final class OrbitModel: ObservableObject {
         (usesTexture ? activeSettings.textureParameterRoutes : activeSettings.parameterRoutes) ?? [:]
     }
     var shaderParameters: [ShaderParameter] { usesTexture ? [] : (selectedScene?.parameters ?? []) }
+    var allShaderParameters: [ShaderParameter] { usesTexture ? [] : (selectedScene?.allParameters ?? []) }
+    var connectedCompatibilityParameters: [ShaderParameter] {
+        (selectedScene?.compatibilityParameters ?? []).filter {
+            let route = activeRoutes[$0.id]
+            return route?.input.enabled == true || route?.output.enabled == true
+        }
+    }
     var parameterSpecs: [ParameterSpec] {
         if usesTexture || selectedScene?.testScene == true { return ParameterSpec.all }
         let common = ParameterSpec.all.filter { !["density","turbulence","energy","rotation"].contains($0.id) }
-        return common + shaderParameters.enumerated().map { $0.element.spec(index:$0.offset) }
+        return common + allShaderParameters.enumerated().map { $0.element.spec(index:$0.offset) }
     }
     func parameterSpec(_ key: String) -> ParameterSpec { parameterSpecs.first { $0.id == key } ?? .find(key) }
-    var quickParameter: ParameterSpec { parameterSpec(shaderParameters.first { $0.quick }?.id ?? "energy") }
     var manualPlaybackSpeed: Float { usesTexture ? (activeSettings.values["texture.speed"] ?? 1) : activeSettings.speed }
     var playbackSpeed: Float { Float(parameterValues["speed"] ?? Double(manualPlaybackSpeed)) }
     var activeControlOutputCount: Int { activeRoutes.values.filter { $0.output.enabled }.count }
@@ -146,7 +154,7 @@ final class OrbitModel: ObservableObject {
                 for (key, storedValue) in stored.scenes where settings[key] != nil {
                     var value = storedValue
                     value.migrateRoutes(scene:key)
-                    value.migrateShaderParameters(scenes.first { $0.id == key }?.parameters ?? [])
+                    value.migrateShaderParameters(scenes.first { $0.id == key }?.allParameters ?? [])
                     settings[key]?.values.merge(value.values) { _, storedValue in storedValue }
                     settings[key]?.speed = value.speed
                     settings[key]?.mapping = value.mapping
@@ -266,7 +274,7 @@ final class OrbitModel: ObservableObject {
         let appearance = ["density", "turbulence", "energy", "hueShift", "brightness", "seed",
                           "coverage", "gapSoftness", "gapMotion", "fragmentation"]
         for name in appearance { updated.values[name] = scene.defaults[name] }
-        for parameter in scene.parameters { updated.values[parameter.id] = Float(parameter.defaultValue) }
+        for parameter in scene.allParameters { updated.values[parameter.id] = Float(parameter.defaultValue) }
         updated.speed = scene.defaultClockSpeed
         settings[selectedSceneID] = updated
         restartPlayback(); resetParameterState()
@@ -350,7 +358,7 @@ final class OrbitModel: ObservableObject {
         // A shared monotonic clock for every preview and output. Rendering delays must not slow time.
         let now = CACurrentMediaTime(); let delta = max(0, now - lastTime); lastTime = now
         var values = parameterValues.mapValues(Float.init)
-        for parameter in shaderParameters { values[parameter.uniform] = values[parameter.id] ?? Float(parameter.defaultValue) }
+        for parameter in allShaderParameters { values[parameter.uniform] = values[parameter.id] ?? Float(parameter.defaultValue) }
         let speed = playbackSpeed
         if playing { phaseTime += delta * Double(speed) }
         if usesTexture, let scene = selectedScene, let original = scene.texture {

@@ -145,7 +145,8 @@
           "group": 0,
           "quick": true,
           "unit": "",
-          "legacyKey": "density"
+          "legacyKey": "density",
+          "midiCC": 40
         },
         {
           "id": "flowDistortion",
@@ -158,7 +159,8 @@
           "group": 0,
           "quick": false,
           "unit": "",
-          "legacyKey": "turbulence"
+          "legacyKey": "turbulence",
+          "midiCC": 41
         },
         {
           "id": "ridgeWidth",
@@ -171,7 +173,8 @@
           "group": 0,
           "quick": false,
           "unit": "×",
-          "legacyKey": null
+          "legacyKey": null,
+          "midiCC": 42
         },
         {
           "id": "sheen",
@@ -184,20 +187,8 @@
           "group": 1,
           "quick": false,
           "unit": "",
-          "legacyKey": "energy"
-        },
-        {
-          "id": "poolContrast",
-          "title": "명암 대비",
-          "detail": "유체 안의 어두운 영역과 밝은 영역을 분리합니다.",
-          "uniform": "shape1",
-          "defaultValue": 1,
-          "minimum": 0,
-          "maximum": 2,
-          "group": 1,
-          "quick": false,
-          "unit": "×",
-          "legacyKey": null
+          "legacyKey": "energy",
+          "midiCC": 43
         },
         {
           "id": "surfaceDrift",
@@ -210,7 +201,24 @@
           "group": 1,
           "quick": false,
           "unit": "×",
-          "legacyKey": null
+          "legacyKey": null,
+          "midiCC": 45
+        }
+      ],
+      "compatibilityParameters": [
+        {
+          "id": "poolContrast",
+          "title": "명암 대비",
+          "detail": "유체 안의 어두운 영역과 밝은 영역을 분리합니다.",
+          "uniform": "shape1",
+          "defaultValue": 1,
+          "minimum": 0,
+          "maximum": 2,
+          "group": 1,
+          "quick": false,
+          "unit": "×",
+          "legacyKey": null,
+          "midiCC": 44
         }
       ],
       "defaults": {
@@ -242,8 +250,8 @@
         "flowDistortion": 0.68,
         "ridgeWidth": 1,
         "sheen": 0.52,
-        "poolContrast": 1,
-        "surfaceDrift": 1
+        "surfaceDrift": 1,
+        "poolContrast": 1
       },
       "defaultClockSpeed": 1.0,
       "sensorMappingEnabled": true,
@@ -293,7 +301,8 @@
           "group": 0,
           "quick": true,
           "unit": "",
-          "legacyKey": null
+          "legacyKey": null,
+          "midiCC": 40
         },
         {
           "id": "bandDensity",
@@ -306,33 +315,8 @@
           "group": 0,
           "quick": false,
           "unit": "",
-          "legacyKey": "density"
-        },
-        {
-          "id": "bandBend",
-          "title": "밴드 휘어짐",
-          "detail": "밴드의 국소적인 휘어짐을 조절합니다.",
-          "uniform": "turbulence",
-          "defaultValue": 0.32,
-          "minimum": 0,
-          "maximum": 1,
-          "group": 0,
-          "quick": false,
-          "unit": "",
-          "legacyKey": "turbulence"
-        },
-        {
-          "id": "bandGlow",
-          "title": "밴드 발광",
-          "detail": "밴드의 발광량을 조절합니다.",
-          "uniform": "energy",
-          "defaultValue": 0.62,
-          "minimum": 0,
-          "maximum": 1,
-          "group": 1,
-          "quick": false,
-          "unit": "",
-          "legacyKey": "energy"
+          "legacyKey": "density",
+          "midiCC": 41
         },
         {
           "id": "bandSharpness",
@@ -345,7 +329,8 @@
           "group": 1,
           "quick": false,
           "unit": "×",
-          "legacyKey": null
+          "legacyKey": null,
+          "midiCC": 44
         },
         {
           "id": "colorSpread",
@@ -358,7 +343,38 @@
           "group": 1,
           "quick": false,
           "unit": "×",
-          "legacyKey": null
+          "legacyKey": null,
+          "midiCC": 45
+        }
+      ],
+      "compatibilityParameters": [
+        {
+          "id": "bandBend",
+          "title": "밴드 휘어짐",
+          "detail": "밴드의 국소적인 휘어짐을 조절합니다.",
+          "uniform": "turbulence",
+          "defaultValue": 0.32,
+          "minimum": 0,
+          "maximum": 1,
+          "group": 0,
+          "quick": false,
+          "unit": "",
+          "legacyKey": "turbulence",
+          "midiCC": 42
+        },
+        {
+          "id": "bandGlow",
+          "title": "밴드 발광",
+          "detail": "밴드의 발광량을 조절합니다.",
+          "uniform": "energy",
+          "defaultValue": 0.62,
+          "minimum": 0,
+          "maximum": 1,
+          "group": 1,
+          "quick": false,
+          "unit": "",
+          "legacyKey": "energy",
+          "midiCC": 43
         }
       ],
       "defaults": {
@@ -388,10 +404,10 @@
         "shape3": 1.0,
         "bandLength": 1,
         "bandDensity": 0.62,
-        "bandBend": 0.32,
-        "bandGlow": 0.62,
         "bandSharpness": 1,
-        "colorSpread": 1
+        "colorSpread": 1,
+        "bandBend": 0.32,
+        "bandGlow": 0.62
       },
       "defaultClockSpeed": 1.0,
       "sensorMappingEnabled": true,
@@ -441,7 +457,8 @@
           "group": 0,
           "quick": true,
           "unit": "",
-          "legacyKey": null
+          "legacyKey": null,
+          "midiCC": 40
         },
         {
           "id": "dustDensity",
@@ -454,20 +471,8 @@
           "group": 0,
           "quick": false,
           "unit": "",
-          "legacyKey": "density"
-        },
-        {
-          "id": "cloudScale",
-          "title": "구름결 밀도",
-          "detail": "흐르는 구름결을 크거나 촘촘하게 만듭니다.",
-          "uniform": "turbulence",
-          "defaultValue": 0.4,
-          "minimum": 0,
-          "maximum": 1,
-          "group": 0,
-          "quick": false,
-          "unit": "",
-          "legacyKey": "turbulence"
+          "legacyKey": "density",
+          "midiCC": 41
         },
         {
           "id": "edgeGlow",
@@ -480,7 +485,8 @@
           "group": 1,
           "quick": false,
           "unit": "",
-          "legacyKey": "energy"
+          "legacyKey": "energy",
+          "midiCC": 43
         },
         {
           "id": "sparkleStrength",
@@ -493,7 +499,8 @@
           "group": 1,
           "quick": false,
           "unit": "×",
-          "legacyKey": null
+          "legacyKey": null,
+          "midiCC": 44
         },
         {
           "id": "warmLobes",
@@ -506,7 +513,24 @@
           "group": 1,
           "quick": false,
           "unit": "",
-          "legacyKey": null
+          "legacyKey": null,
+          "midiCC": 45
+        }
+      ],
+      "compatibilityParameters": [
+        {
+          "id": "cloudScale",
+          "title": "구름결 밀도",
+          "detail": "흐르는 구름결을 크거나 촘촘하게 만듭니다.",
+          "uniform": "turbulence",
+          "defaultValue": 0.4,
+          "minimum": 0,
+          "maximum": 1,
+          "group": 0,
+          "quick": false,
+          "unit": "",
+          "legacyKey": "turbulence",
+          "midiCC": 42
         }
       ],
       "defaults": {
@@ -536,10 +560,10 @@
         "shape3": 1.0,
         "ribbonWidth": 1,
         "dustDensity": 0.4,
-        "cloudScale": 0.4,
         "edgeGlow": 0.62,
         "sparkleStrength": 1,
-        "warmLobes": 1
+        "warmLobes": 1,
+        "cloudScale": 0.4
       },
       "defaultClockSpeed": 1.0,
       "sensorMappingEnabled": true,
@@ -589,7 +613,8 @@
           "group": 0,
           "quick": true,
           "unit": "×",
-          "legacyKey": null
+          "legacyKey": null,
+          "midiCC": 40
         },
         {
           "id": "filamentDensity",
@@ -602,7 +627,8 @@
           "group": 0,
           "quick": false,
           "unit": "",
-          "legacyKey": "density"
+          "legacyKey": "density",
+          "midiCC": 41
         },
         {
           "id": "filamentBend",
@@ -615,7 +641,8 @@
           "group": 0,
           "quick": false,
           "unit": "",
-          "legacyKey": "turbulence"
+          "legacyKey": "turbulence",
+          "midiCC": 42
         },
         {
           "id": "dischargeIntensity",
@@ -628,7 +655,8 @@
           "group": 1,
           "quick": false,
           "unit": "",
-          "legacyKey": "energy"
+          "legacyKey": "energy",
+          "midiCC": 43
         },
         {
           "id": "filamentWidth",
@@ -641,7 +669,8 @@
           "group": 1,
           "quick": false,
           "unit": "×",
-          "legacyKey": null
+          "legacyKey": null,
+          "midiCC": 44
         },
         {
           "id": "rootGlow",
@@ -654,9 +683,11 @@
           "group": 1,
           "quick": false,
           "unit": "×",
-          "legacyKey": null
+          "legacyKey": null,
+          "midiCC": 45
         }
       ],
+      "compatibilityParameters": [],
       "defaults": {
         "outputWidth": 1280,
         "outputHeight": 720,
@@ -737,7 +768,8 @@
           "group": 0,
           "quick": true,
           "unit": "×",
-          "legacyKey": null
+          "legacyKey": null,
+          "midiCC": 40
         },
         {
           "id": "haloWidth",
@@ -750,46 +782,8 @@
           "group": 0,
           "quick": false,
           "unit": "",
-          "legacyKey": null
-        },
-        {
-          "id": "foldScale",
-          "title": "표면 주름 밀도",
-          "detail": "헤일로 안의 작은 주름을 촘촘하게 만듭니다.",
-          "uniform": "density",
-          "defaultValue": 0.32,
-          "minimum": 0,
-          "maximum": 1,
-          "group": 0,
-          "quick": false,
-          "unit": "",
-          "legacyKey": "density"
-        },
-        {
-          "id": "haloGlow",
-          "title": "헤일로 발광",
-          "detail": "청록색 빛 띠의 발광량을 조절합니다.",
-          "uniform": "energy",
-          "defaultValue": 0.65,
-          "minimum": 0,
-          "maximum": 1,
-          "group": 1,
-          "quick": false,
-          "unit": "",
-          "legacyKey": "energy"
-        },
-        {
-          "id": "foldDistortion",
-          "title": "주름 뒤틀림",
-          "detail": "밝은 구간과 표면 주름의 국소적인 뒤틀림입니다.",
-          "uniform": "turbulence",
-          "defaultValue": 0.4,
-          "minimum": 0,
-          "maximum": 1,
-          "group": 1,
-          "quick": false,
-          "unit": "",
-          "legacyKey": "turbulence"
+          "legacyKey": null,
+          "midiCC": 41
         },
         {
           "id": "acceleration",
@@ -802,7 +796,52 @@
           "group": 1,
           "quick": false,
           "unit": "×",
-          "legacyKey": null
+          "legacyKey": null,
+          "midiCC": 45
+        }
+      ],
+      "compatibilityParameters": [
+        {
+          "id": "foldScale",
+          "title": "표면 주름 밀도",
+          "detail": "헤일로 안의 작은 주름을 촘촘하게 만듭니다.",
+          "uniform": "density",
+          "defaultValue": 0.32,
+          "minimum": 0,
+          "maximum": 1,
+          "group": 0,
+          "quick": false,
+          "unit": "",
+          "legacyKey": "density",
+          "midiCC": 42
+        },
+        {
+          "id": "haloGlow",
+          "title": "헤일로 발광",
+          "detail": "청록색 빛 띠의 발광량을 조절합니다.",
+          "uniform": "energy",
+          "defaultValue": 0.65,
+          "minimum": 0,
+          "maximum": 1,
+          "group": 1,
+          "quick": false,
+          "unit": "",
+          "legacyKey": "energy",
+          "midiCC": 43
+        },
+        {
+          "id": "foldDistortion",
+          "title": "주름 뒤틀림",
+          "detail": "밝은 구간과 표면 주름의 국소적인 뒤틀림입니다.",
+          "uniform": "turbulence",
+          "defaultValue": 0.4,
+          "minimum": 0,
+          "maximum": 1,
+          "group": 1,
+          "quick": false,
+          "unit": "",
+          "legacyKey": "turbulence",
+          "midiCC": 44
         }
       ],
       "defaults": {
@@ -832,10 +871,10 @@
         "shape3": 1.0,
         "beamWidth": 1,
         "haloWidth": 1,
+        "acceleration": 1,
         "foldScale": 0.32,
         "haloGlow": 0.65,
-        "foldDistortion": 0.4,
-        "acceleration": 1
+        "foldDistortion": 0.4
       },
       "defaultClockSpeed": 1.0,
       "sensorMappingEnabled": true,
@@ -871,6 +910,7 @@
       "computeFunction": "orbit_calibration_compute",
       "fragmentFunction": "orbit_calibration_fragment",
       "parameters": [],
+      "compatibilityParameters": [],
       "defaults": {
         "outputWidth": 1280,
         "outputHeight": 720,
@@ -924,7 +964,8 @@
           "group": 0,
           "quick": true,
           "unit": "×",
-          "legacyKey": null
+          "legacyKey": null,
+          "midiCC": 40
         },
         {
           "id": "barWidth",
@@ -937,7 +978,8 @@
           "group": 0,
           "quick": false,
           "unit": "×",
-          "legacyKey": null
+          "legacyKey": null,
+          "midiCC": 41
         },
         {
           "id": "fragmentDensity",
@@ -950,7 +992,8 @@
           "group": 0,
           "quick": false,
           "unit": "",
-          "legacyKey": "density"
+          "legacyKey": "density",
+          "midiCC": 42
         },
         {
           "id": "fragmentGlow",
@@ -963,7 +1006,8 @@
           "group": 1,
           "quick": false,
           "unit": "",
-          "legacyKey": "energy"
+          "legacyKey": "energy",
+          "midiCC": 43
         },
         {
           "id": "lifetimeRate",
@@ -976,7 +1020,8 @@
           "group": 1,
           "quick": false,
           "unit": "×",
-          "legacyKey": null
+          "legacyKey": null,
+          "midiCC": 44
         },
         {
           "id": "driftVariation",
@@ -989,9 +1034,25 @@
           "group": 1,
           "quick": false,
           "unit": "",
-          "legacyKey": "turbulence"
+          "legacyKey": "turbulence",
+          "midiCC": 45
+        },
+        {
+          "id": "filmMix",
+          "title": "색 띠 비중",
+          "detail": "직선 바를 유지하면서 바탕의 스펙트럼 색 띠만 드러내거나 지웁니다.",
+          "uniform": "shape3",
+          "defaultValue": 1,
+          "minimum": 0,
+          "maximum": 1,
+          "group": 0,
+          "quick": false,
+          "unit": "",
+          "legacyKey": null,
+          "midiCC": 46
         }
       ],
+      "compatibilityParameters": [],
       "defaults": {
         "outputWidth": 1280,
         "outputHeight": 720,
@@ -1022,7 +1083,8 @@
         "fragmentDensity": 0.55,
         "fragmentGlow": 0.6,
         "lifetimeRate": 1,
-        "driftVariation": 0.45
+        "driftVariation": 0.45,
+        "filmMix": 1
       },
       "defaultClockSpeed": 0.7,
       "sensorMappingEnabled": true,
@@ -1068,7 +1130,8 @@
           "group": 0,
           "quick": true,
           "unit": "×",
-          "legacyKey": null
+          "legacyKey": null,
+          "midiCC": 40
         },
         {
           "id": "particleDensity",
@@ -1081,7 +1144,8 @@
           "group": 0,
           "quick": false,
           "unit": "",
-          "legacyKey": "density"
+          "legacyKey": "density",
+          "midiCC": 41
         },
         {
           "id": "particleSize",
@@ -1094,7 +1158,8 @@
           "group": 0,
           "quick": false,
           "unit": "×",
-          "legacyKey": null
+          "legacyKey": null,
+          "midiCC": 42
         },
         {
           "id": "headGlow",
@@ -1107,7 +1172,8 @@
           "group": 1,
           "quick": false,
           "unit": "",
-          "legacyKey": "energy"
+          "legacyKey": "energy",
+          "midiCC": 43
         },
         {
           "id": "sparkleStrength",
@@ -1120,8 +1186,11 @@
           "group": 1,
           "quick": false,
           "unit": "×",
-          "legacyKey": null
-        },
+          "legacyKey": null,
+          "midiCC": 44
+        }
+      ],
+      "compatibilityParameters": [
         {
           "id": "rippleDepth",
           "title": "물결 굴곡",
@@ -1133,7 +1202,8 @@
           "group": 1,
           "quick": false,
           "unit": "",
-          "legacyKey": "turbulence"
+          "legacyKey": "turbulence",
+          "midiCC": 45
         }
       ],
       "defaults": {

@@ -147,14 +147,6 @@
       "MAX": 1
     },
     {
-      "NAME": "cloudScale",
-      "LABEL": "구름결 밀도",
-      "TYPE": "float",
-      "DEFAULT": 0.4,
-      "MIN": 0,
-      "MAX": 1
-    },
-    {
       "NAME": "edgeGlow",
       "LABEL": "테두리 발광",
       "TYPE": "float",
@@ -358,7 +350,7 @@ void main() {
     p.viewMode = float(viewMode);
     p.phaseTime = externalClock ? clockSeconds : TIME * speed;
     p.density = dustDensity;
-    p.turbulence = cloudScale;
+    p.turbulence = 0.4;
     p.energy = edgeGlow;
     p.hueShift = hueShift;
     p.brightness = brightness;

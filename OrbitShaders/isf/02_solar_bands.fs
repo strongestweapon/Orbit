@@ -147,22 +147,6 @@
       "MAX": 1
     },
     {
-      "NAME": "bandBend",
-      "LABEL": "밴드 휘어짐",
-      "TYPE": "float",
-      "DEFAULT": 0.32,
-      "MIN": 0,
-      "MAX": 1
-    },
-    {
-      "NAME": "bandGlow",
-      "LABEL": "밴드 발광",
-      "TYPE": "float",
-      "DEFAULT": 0.62,
-      "MIN": 0,
-      "MAX": 1
-    },
-    {
       "NAME": "bandSharpness",
       "LABEL": "밴드 명암",
       "TYPE": "float",
@@ -327,8 +311,8 @@ void main() {
     p.viewMode = float(viewMode);
     p.phaseTime = externalClock ? clockSeconds : TIME * speed;
     p.density = bandDensity;
-    p.turbulence = bandBend;
-    p.energy = bandGlow;
+    p.turbulence = 0.32;
+    p.energy = 0.62;
     p.hueShift = hueShift;
     p.brightness = brightness;
     p.seed = seed;

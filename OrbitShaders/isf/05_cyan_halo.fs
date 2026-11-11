@@ -147,30 +147,6 @@
       "MAX": 1
     },
     {
-      "NAME": "foldScale",
-      "LABEL": "표면 주름 밀도",
-      "TYPE": "float",
-      "DEFAULT": 0.32,
-      "MIN": 0,
-      "MAX": 1
-    },
-    {
-      "NAME": "haloGlow",
-      "LABEL": "헤일로 발광",
-      "TYPE": "float",
-      "DEFAULT": 0.65,
-      "MIN": 0,
-      "MAX": 1
-    },
-    {
-      "NAME": "foldDistortion",
-      "LABEL": "주름 뒤틀림",
-      "TYPE": "float",
-      "DEFAULT": 0.4,
-      "MIN": 0,
-      "MAX": 1
-    },
-    {
       "NAME": "acceleration",
       "LABEL": "회전 가속",
       "TYPE": "float",
@@ -346,9 +322,9 @@ void main() {
     p.outputHeight = RENDERSIZE.y;
     p.viewMode = float(viewMode);
     p.phaseTime = externalClock ? clockSeconds : TIME * speed;
-    p.density = foldScale;
-    p.turbulence = foldDistortion;
-    p.energy = haloGlow;
+    p.density = 0.32;
+    p.turbulence = 0.4;
+    p.energy = 0.65;
     p.hueShift = hueShift;
     p.brightness = brightness;
     p.seed = seed;

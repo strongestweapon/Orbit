@@ -46,7 +46,7 @@ class MetalRenderer:
         params.update(outputWidth=width,outputHeight=height,viewMode=view,
                       phaseTime=seconds*scene['defaultClockSpeed'])
         if overrides: params.update(overrides)
-        for control in scene.get('parameters',[]):
+        for control in scene.get('parameters',[])+scene.get('compatibilityParameters',[]):
             params[control['uniform']]=params[control['id']]
         raw=struct.pack('<'+str(len(MANIFEST['uniformBuffer']['fields']))+'f',*(params[k] for k in MANIFEST['uniformBuffer']['fields']))
         ctypes.memmove(self.uniforms.contents(),raw,len(raw))

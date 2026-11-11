@@ -54,3 +54,26 @@ PARAMETERS = {
   control('sparkleStrength','입자 반짝임','금빛 머리를 유지하고 입자의 발광량만 조절합니다.','shape2',1,0,3,group=1,unit='×'),
   control('rippleDepth','물결 굴곡','금빛 머리 내부의 부드러운 물결 변형입니다.','turbulence',.4,group=1,legacy='turbulence')],
 }
+
+# The public control surface follows each scene's visual complexity. Removed
+# 0.3 controls remain available internally so saved values and live routes survive.
+PARAMETERS['07_spectral_fragments'].append(
+ control('filmMix','색 띠 비중','직선 바를 유지하면서 바탕의 스펙트럼 색 띠만 드러내거나 지웁니다.','shape3',1,0,1))
+for controls in PARAMETERS.values():
+    for index, parameter in enumerate(controls): parameter['midiCC'] = 40 + index
+
+RETIRED = {
+ '01_chroma_flow': {'poolContrast'},
+ '02_solar_bands': {'bandBend','bandGlow'},
+ '03_aurora_ribbon': {'cloudScale'},
+ '05_cyan_halo': {'foldScale','haloGlow','foldDistortion'},
+ '08_golden_drift': {'rippleDepth'},
+}
+COMPATIBILITY_PARAMETERS = {
+ sid:[p for p in controls if p['id'] in RETIRED.get(sid,set())]
+ for sid,controls in PARAMETERS.items()
+}
+PARAMETERS = {
+ sid:[p for p in controls if p['id'] not in RETIRED.get(sid,set())]
+ for sid,controls in PARAMETERS.items()
+}

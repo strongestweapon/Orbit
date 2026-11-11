@@ -18,7 +18,7 @@ struct MappedParameterSlider: View {
                 Spacer(minLength:0)
                 Text(String(format:"%.2f",value.wrappedValue)+suffix).monospacedDigit().lineLimit(1)
             }.font(.system(size:11))
-            Slider(value:value,in:range).controlSize(.small)
+            Slider(value:value,in:range).controlSize(.small).accessibilityLabel(title).accessibilityIdentifier("parameter_"+key)
                 .disabled(model.route(for:key).input.enabled && model.selectedScene?.testScene == false)
         }.frame(height:38)
     }

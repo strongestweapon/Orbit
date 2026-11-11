@@ -59,8 +59,9 @@ struct ShaderParameter: Decodable, Identifiable {
     let quick: Bool
     let unit: String
     let legacyKey: String?
+    let midiCC: Int?
     func spec(index: Int) -> ParameterSpec {
-        ParameterSpec(id:id,title:title,range:minimum...maximum,detail:detail,unit:unit,defaultCC:40+index)
+        ParameterSpec(id:id,title:title,range:minimum...maximum,detail:detail,unit:unit,defaultCC:midiCC ?? (40+index))
     }
 }
 

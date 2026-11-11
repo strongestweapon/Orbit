@@ -163,14 +163,6 @@
       "MAX": 1
     },
     {
-      "NAME": "poolContrast",
-      "LABEL": "명암 대비",
-      "TYPE": "float",
-      "DEFAULT": 1,
-      "MIN": 0,
-      "MAX": 2
-    },
-    {
       "NAME": "surfaceDrift",
       "LABEL": "표면 흐름",
       "TYPE": "float",
@@ -356,7 +348,7 @@ void main() {
     p.gapMotion = gapMotion;
     p.fragmentation = fragmentation;
     p.shape0 = ridgeWidth;
-    p.shape1 = poolContrast;
+    p.shape1 = 1.0;
     p.shape2 = surfaceDrift;
     p.shape3 = 1.0;
     vec2 pixel = vec2(isf_FragNormCoord.x, 1.0-isf_FragNormCoord.y) * RENDERSIZE;

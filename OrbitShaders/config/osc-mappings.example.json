@@ -46,8 +46,8 @@
         "sensor": "visitors",
         "target": "parameter.foldDensity",
         "outputRange": [
-          0.2,
-          0.85
+          0,
+          1
         ],
         "clamp": true,
         "smoothingSeconds": 12,
@@ -55,14 +55,14 @@
       },
       {
         "sensor": "racing_speed",
-        "target": "parameter.sheen",
+        "target": "parameter.flowDistortion",
         "outputRange": [
-          0.35,
-          0.85
+          0,
+          1
         ],
         "clamp": true,
         "smoothingSeconds": 8,
-        "staleTarget": 0.52
+        "staleTarget": 0.68
       }
     ],
     "02_solar_bands": [
@@ -79,21 +79,21 @@
       },
       {
         "sensor": "visitors",
-        "target": "parameter.bandDensity",
+        "target": "parameter.bandLength",
         "outputRange": [
-          0.2,
-          0.85
+          0.1,
+          1
         ],
         "clamp": true,
         "smoothingSeconds": 12,
-        "staleTarget": 0.62
+        "staleTarget": 1
       },
       {
         "sensor": "racing_speed",
-        "target": "parameter.bandGlow",
+        "target": "parameter.bandDensity",
         "outputRange": [
-          0.35,
-          0.85
+          0,
+          1
         ],
         "clamp": true,
         "smoothingSeconds": 8,
@@ -114,25 +114,25 @@
       },
       {
         "sensor": "visitors",
-        "target": "parameter.dustDensity",
+        "target": "parameter.ribbonWidth",
         "outputRange": [
-          0.2,
-          0.85
+          0.15,
+          1
         ],
         "clamp": true,
         "smoothingSeconds": 12,
-        "staleTarget": 0.4
+        "staleTarget": 1
       },
       {
         "sensor": "racing_speed",
-        "target": "parameter.edgeGlow",
+        "target": "parameter.dustDensity",
         "outputRange": [
-          0.35,
-          0.85
+          0,
+          1
         ],
         "clamp": true,
         "smoothingSeconds": 8,
-        "staleTarget": 0.62
+        "staleTarget": 0.4
       }
     ],
     "04_electric_corona": [
@@ -149,25 +149,25 @@
       },
       {
         "sensor": "visitors",
-        "target": "parameter.filamentDensity",
+        "target": "parameter.filamentLength",
         "outputRange": [
-          0.2,
-          0.85
+          0.1,
+          1.5
         ],
         "clamp": true,
         "smoothingSeconds": 12,
-        "staleTarget": 0.6
+        "staleTarget": 1
       },
       {
         "sensor": "racing_speed",
-        "target": "parameter.dischargeIntensity",
+        "target": "parameter.filamentDensity",
         "outputRange": [
-          0.35,
-          0.85
+          0,
+          1
         ],
         "clamp": true,
         "smoothingSeconds": 8,
-        "staleTarget": 0.62
+        "staleTarget": 0.6
       }
     ],
     "05_cyan_halo": [
@@ -184,25 +184,25 @@
       },
       {
         "sensor": "visitors",
-        "target": "parameter.foldScale",
+        "target": "parameter.beamWidth",
         "outputRange": [
           0.2,
-          0.85
+          2.5
         ],
         "clamp": true,
         "smoothingSeconds": 12,
-        "staleTarget": 0.32
+        "staleTarget": 1
       },
       {
         "sensor": "racing_speed",
-        "target": "parameter.haloGlow",
+        "target": "parameter.haloWidth",
         "outputRange": [
-          0.35,
-          0.85
+          0.1,
+          1
         ],
         "clamp": true,
         "smoothingSeconds": 8,
-        "staleTarget": 0.65
+        "staleTarget": 1
       }
     ],
     "06_calibration": [],
@@ -220,25 +220,25 @@
       },
       {
         "sensor": "visitors",
-        "target": "parameter.fragmentDensity",
+        "target": "parameter.barLength",
         "outputRange": [
-          0.2,
-          0.85
+          0.1,
+          1.4
         ],
         "clamp": true,
         "smoothingSeconds": 12,
-        "staleTarget": 0.55
+        "staleTarget": 1
       },
       {
         "sensor": "racing_speed",
-        "target": "parameter.fragmentGlow",
+        "target": "parameter.barWidth",
         "outputRange": [
-          0.35,
-          0.85
+          0.25,
+          4
         ],
         "clamp": true,
         "smoothingSeconds": 8,
-        "staleTarget": 0.6
+        "staleTarget": 1
       }
     ],
     "08_golden_drift": [
@@ -255,25 +255,25 @@
       },
       {
         "sensor": "visitors",
-        "target": "parameter.particleDensity",
+        "target": "parameter.headWidth",
         "outputRange": [
-          0.2,
-          0.85
+          0.3,
+          2
         ],
         "clamp": true,
         "smoothingSeconds": 12,
-        "staleTarget": 0.45
+        "staleTarget": 1
       },
       {
         "sensor": "racing_speed",
-        "target": "parameter.headGlow",
+        "target": "parameter.particleDensity",
         "outputRange": [
-          0.35,
-          0.85
+          0,
+          1
         ],
         "clamp": true,
         "smoothingSeconds": 8,
-        "staleTarget": 0.65
+        "staleTarget": 0.45
       }
     ]
   }

@@ -3,7 +3,7 @@
 import json
 from build_texture_shader import build_texture_shader
 from pathlib import Path
-from scene_parameters import PARAMETERS
+from scene_parameters import PARAMETERS, COMPATIBILITY_PARAMETERS
 
 ROOT = Path(__file__).resolve().parents[1]
 SCENES = [
@@ -64,8 +64,10 @@ def main():
           seed=3,angleOffset=0,flipU=0,flipV=0,ringWidth=0.128,testPattern=0,markerWidth=12)
         defaults.update(zip(['coverage','gapSoftness','gapMotion','fragmentation'],PRESENCE[sid]))
         parameters = PARAMETERS.get(sid, [])
+        compatibility = COMPATIBILITY_PARAMETERS.get(sid, [])
+        all_parameters = parameters + compatibility
         defaults.update({f'shape{i}':1.0 for i in range(4)})
-        defaults.update({p['id']:p['defaultValue'] for p in parameters})
+        defaults.update({p['id']:p['defaultValue'] for p in all_parameters})
         ns='OrbitScene'+str(index)
         entry='orbit_'+sid[3:]
         sample='''
@@ -120,7 +122,7 @@ fragment float4 {entry}_fragment(float4 position [[position]],
             inputs += [dict(NAME='testPattern',LABEL='Test pattern',TYPE='long',DEFAULT=0,
                             VALUES=list(range(10)),LABELS=PATTERNS),float_input('markerWidth',12,1,300)]
         # Expose semantic IDs in ISF too; legacy slots remain internal.
-        replaced = {p['uniform'] for p in parameters}
+        replaced = {p['uniform'] for p in all_parameters}
         inputs = [item for item in inputs if item['NAME'] not in replaced]
         inputs += [float_input(p['id'],p['defaultValue'],p['minimum'],p['maximum'],p['title']) for p in parameters]
         meta={'ISFVSN':'2.0','VSN':'1.4.0','DESCRIPTION':description+' / '+name,
@@ -135,10 +137,11 @@ fragment float4 {entry}_fragment(float4 position [[position]],
           'testPattern':'float(testPattern)' if sid=='06_calibration' else '0.0',
           'markerWidth':'markerWidth' if sid=='06_calibration' else '12.0',
           **{f:f for f in ['coverage','gapSoftness','gapMotion','fragmentation']}}.items())
-        for p in parameters:
-            assignments = assignments.replace('p.'+p['uniform']+' = '+p['uniform']+';', 'p.'+p['uniform']+' = '+p['id']+';')
+        for p in all_parameters:
+            value = p['id'] if p in parameters else str(float(p['defaultValue']))
+            assignments = assignments.replace('p.'+p['uniform']+' = '+p['uniform']+';', 'p.'+p['uniform']+' = '+value+';')
         for slot in ['shape0','shape1','shape2','shape3']:
-            value = next((p['id'] for p in parameters if p['uniform']==slot),'1.0')
+            value = next((p['id'] if p in parameters else str(float(p['defaultValue'])) for p in all_parameters if p['uniform']==slot),'1.0')
             assignments += '\n    p.'+slot+' = '+value+';'
         isf='/*'+json.dumps(meta,ensure_ascii=False,indent=2)+'*/\n#define ORBIT_ATAN atan\n'+common+'\n'+src+'''
 void main() {
@@ -154,7 +157,8 @@ void main() {
         (ROOT/'isf'/f'{sid}.fs').write_text(isf)
         manifest['scenes'].append(dict(id=sid,name=name,description=description,referenceSeconds=reference,
             metal=f'metal/{sid}.metal',isf=f'isf/{sid}.fs',computeFunction=entry+'_compute',
-            fragmentFunction=entry+'_fragment',parameters=parameters,defaults=defaults,defaultClockSpeed=speed,
+            fragmentFunction=entry+'_fragment',parameters=parameters,compatibilityParameters=compatibility,
+            defaults=defaults,defaultClockSpeed=speed,
             sensorMappingEnabled=sid!='06_calibration',testScene=sid=='06_calibration',referenceImage=STILLS.get(sid),texture=textures.get(sid)))
     (ROOT/'metal/OrbitFullscreen.metal').write_text('''#include <metal_stdlib>
 using namespace metal;
@@ -171,15 +175,17 @@ vertex float4 orbit_fullscreen_vertex(uint id [[vertex_id]]) {
       'scenes':{}}
     for scene in manifest['scenes']:
         if scene['testScene']: mappings['scenes'][scene['id']]=[]; continue
-        density_control=next(p for p in scene['parameters'] if p['uniform']=='density')
-        energy_control=next(p for p in scene['parameters'] if p['uniform']=='energy')
+        first_control=scene['parameters'][0]
+        second_control=scene['parameters'][1]
         mappings['scenes'][scene['id']]=[
           {'sensor':'racing_speed','target':'clock.speed','outputRange':[0.25,1.5],
            'clamp':True,'smoothingSeconds':8,'staleTarget':scene['defaultClockSpeed']},
-          {'sensor':'visitors','target':'parameter.'+density_control['id'],'outputRange':[0.2,0.85],
-           'clamp':True,'smoothingSeconds':12,'staleTarget':scene['defaults']['density']},
-          {'sensor':'racing_speed','target':'parameter.'+energy_control['id'],'outputRange':[0.35,0.85],
-           'clamp':True,'smoothingSeconds':8,'staleTarget':scene['defaults']['energy']}]
+          {'sensor':'visitors','target':'parameter.'+first_control['id'],
+           'outputRange':[first_control['minimum'],first_control['maximum']],
+           'clamp':True,'smoothingSeconds':12,'staleTarget':first_control['defaultValue']},
+          {'sensor':'racing_speed','target':'parameter.'+second_control['id'],
+           'outputRange':[second_control['minimum'],second_control['maximum']],
+           'clamp':True,'smoothingSeconds':8,'staleTarget':second_control['defaultValue']}]
     (ROOT/'config/osc-mappings.example.json').write_text(json.dumps(mappings,ensure_ascii=False,indent=2)+'\n')
     build_texture_shader()
     print(f'Built {len(SCENES)} Metal shaders and ISF generators; 96-byte uniform layout.')
