@@ -5,10 +5,10 @@ private let orbitPanel = Color(white:0.085)
 private let orbitBrandImage = Bundle.main.url(forResource:"OrbitLogo",withExtension:"png")
     .flatMap { NSImage(contentsOf:$0) }
 private enum OrbitPanel: String, Identifiable {
-    case look, sensors, mapping, output
+    case look, sensors, output
     var id: String { rawValue }
     var title: String {
-        switch self { case .look:return "씬 연출";case .sensors:return "센서 입력";case .mapping:return "센서 매핑";case .output:return "출력 설정" }
+        switch self { case .look:return "씬 연출";case .sensors:return "센서 입력";case .output:return "출력 설정" }
     }
 }
 
@@ -136,15 +136,16 @@ struct ContentView: View {
             if model.selectedScene?.testScene == true {
                 PatternPicker(model:model).frame(width:225)
             } else {
-                OrbitSlider(title:"속도",value:Binding(get:{Double(model.playbackSpeed)},set:{model.setSpeed(Float($0))}),range:0...3,suffix:"×").frame(width:145)
+                MappedParameterSlider(model:model,key:"speed",title:"속도",range:0...3,suffix:"×").frame(width:145)
             }
-            OrbitSlider(title:"밝기",value:binding("brightness")).frame(width:145)
-            if model.selectedScene?.testScene == false {OrbitSlider(title:model.usesTexture ? "발광" : "에너지",value:binding("energy")).frame(width:145)}
+            MappedParameterSlider(model:model,key:"brightness",title:"밝기").frame(width:145)
+            if model.selectedScene?.testScene == false {MappedParameterSlider(model:model,key:"energy",title:model.usesTexture ? "발광" : "에너지").frame(width:145)}
             Spacer(minLength:0)
             Button {panel = .look} label:{Label("씬 연출",systemImage:"slider.horizontal.3")}
                 .disabled(model.selectedScene?.testScene == true).accessibilityIdentifier("openLook")
-            Button {panel = .mapping} label:{Label("센서 매핑",systemImage:"point.3.connected.trianglepath.dotted")}
-                .disabled(model.selectedScene?.testScene == true).accessibilityIdentifier("openMapping")
+            Toggle("제어 출력 \(model.activeControlOutputCount)",isOn:$model.controlOutputEnabled)
+                .toggleStyle(.switch).controlSize(.small).fixedSize().accessibilityIdentifier("controlOutputToggle")
+                .help("각 파라미터 옆 연결 버튼에서 입력·출력을 설정하세요.")
         }.padding(.horizontal,20).frame(height:70).background(orbitPanel)
     }
     private var sensorStrip: some View {
@@ -171,7 +172,7 @@ struct ContentView: View {
         HStack {
             Text(model.usesTexture ? "추출 원본 재생" : "실시간 코드 생성 · 이미지/영상 텍스처 없음")
             Spacer()
-            Text(model.lastMessage).lineLimit(1)
+            Text(model.controlOutputEnabled ? model.controlOutputStatus : model.lastMessage).lineLimit(1)
             Text("Metal · \(Int(model.fps.rounded())) fps").frame(width:105,alignment:.trailing).monospacedDigit()
         }.font(.system(size:9,design:.monospaced)).foregroundStyle(.secondary).padding(.horizontal,20).frame(height:23).background(orbitPanel)
     }
@@ -196,7 +197,7 @@ private struct OrbitSettingsPanel: View {
                 .padding(20)
             Divider()
             Group {
-                switch panel {case .look:look;case .sensors:sensors;case .mapping:mapping;case .output:output}
+                switch panel {case .look:look;case .sensors:sensors;case .output:output}
             }.padding(20).frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.topLeading)
             Divider()
             HStack {
@@ -215,7 +216,7 @@ private struct OrbitSettingsPanel: View {
                 parameter("색상 이동","hueShift",range:-0.5...0.5)
                 Text(model.usesTexture ? "추출한 원본을 재생합니다." : "빛의 형태·색·질감·시간 변화를 셰이더 코드로 생성합니다.").font(.system(size:10)).foregroundStyle(.secondary)
             } else if tab==1 {
-                OrbitSlider(title:"전체 속도",value:Binding(get:{Double(model.playbackSpeed)},set:{model.setSpeed(Float($0))}),range:0...3,suffix:"×")
+                MappedParameterSlider(model:model,key:"speed",title:"전체 속도",range:0...3,suffix:"×")
                 parameter(model.usesTexture ? "부분 흐름 변형" : "움직임","turbulence")
                 if model.usesTexture && model.selectedScene?.texture?.kind=="image" {parameter("전체 회전","rotation")}
                 Text(model.usesTexture ? "원본 재생 1.00×는 추출 구간의 원래 속도입니다." : "속도는 시간 진행을, 움직임은 씬 내부의 변화를 조절합니다.").font(.system(size:10)).foregroundStyle(.secondary)
@@ -272,27 +273,6 @@ private struct OrbitSettingsPanel: View {
         guard let id=selectedSensor,model.sensors.contains(where:{$0.id==id}) else{return nil}
         return Binding(get:{model.sensors.first{$0.id==id}!},set:{value in if let i=model.sensors.firstIndex(where:{$0.id==id}) {model.sensors[i]=value}})
     }
-    private var mapping:some View {
-        VStack(alignment:.leading,spacing:20) {
-            Toggle("이 씬에서 센서 매핑 사용",isOn:Binding(get:{model.mapping.enabled},set:{v in model.setMapping{$0.enabled=v}}))
-            Picker("센서 입력",selection:Binding<UUID?>(get:{model.mapping.sensorID},set:{v in model.setMapping{$0.sensorID=v}})) {
-                Text("센서 선택").tag(Optional<UUID>.none)
-                ForEach(model.sensors){Text($0.name).tag(Optional($0.id))}
-            }
-            Picker("연결할 파라미터",selection:Binding(get:{model.mapping.target},set:{v in model.setMapping{$0.target=v}})) {
-                Text("속도").tag("speed");Text("밝기").tag("brightness")
-                Text(model.usesTexture ? "질감 대비" : "밀도").tag("density")
-                Text("부분 흐름 변형").tag("turbulence");Text(model.usesTexture ? "발광" : "에너지").tag("energy")
-                Text("빛의 범위").tag("coverage");Text("빈 구간 이동").tag("gapMotion");Text("조각화").tag("fragmentation")
-            }
-            HStack(spacing:18) {
-                labeled("출력 최소") {TextField("0",value:Binding(get:{model.mapping.minimum},set:{v in model.setMapping{$0.minimum=v}}),format:.number)}
-                labeled("출력 최대") {TextField("1",value:Binding(get:{model.mapping.maximum},set:{v in model.setMapping{$0.maximum=v}}),format:.number)}
-            }
-            OrbitSlider(title:"새 값으로 전환하는 시간",value:Binding(get:{model.mapping.smoothingSeconds},set:{v in model.setMapping{$0.smoothingSeconds=v}}),range:0...30,suffix:"s")
-            Text("센서 수신은 약 30초 간격을 기준으로 보간합니다. 90초간 수신이 없으면 기본값으로 돌아갑니다.").font(.system(size:11)).foregroundStyle(.secondary)
-        }.font(.system(size:12)).textFieldStyle(.roundedBorder)
-    }
     private var output:some View {
         VStack(alignment:.leading,spacing:12) {
             Picker("출력 설정",selection:$tab){Text("디스플레이 · 크기").tag(0);Text("링 방향 · 테스트").tag(1)}.pickerStyle(.segmented)
@@ -331,8 +311,16 @@ private struct OrbitSettingsPanel: View {
                     .font(.system(size:10)).foregroundStyle(.secondary)
             } else {
                 parameter("링 시작점","angleOffset")
-                Toggle("진행 방향 반전",isOn:boolBinding("flipU"))
-                Toggle("안쪽 / 바깥쪽 반전",isOn:boolBinding("flipV"))
+                HStack {
+                    Toggle("진행 방향 반전",isOn:boolBinding("flipU"))
+                        .disabled(model.route(for:"flipU").input.enabled && model.selectedScene?.testScene == false)
+                    ParameterRouteButton(model:model,key:"flipU",title:"진행 방향 반전")
+                }
+                HStack {
+                    Toggle("안쪽 / 바깥쪽 반전",isOn:boolBinding("flipV"))
+                        .disabled(model.route(for:"flipV").input.enabled && model.selectedScene?.testScene == false)
+                    ParameterRouteButton(model:model,key:"flipV",title:"안쪽 / 바깥쪽 반전")
+                }
                 Divider()
                 Button("LED 테스트 씬 열기") {model.selectedSceneID="06_calibration";close()}
                 Text("구간 번호·그리드·안팎 방향·RGB·회색·단일 픽셀 패턴을 사용할 수 있습니다.").font(.system(size:11)).foregroundStyle(.secondary)
@@ -340,7 +328,7 @@ private struct OrbitSettingsPanel: View {
         }.font(.system(size:12))
     }
     private func parameter(_ title:String,_ key:String,range:ClosedRange<Double>=0...1)->some View {
-        OrbitSlider(title:title,value:Binding(get:{Double(model.value(key))},set:{model.setValue(key,Float($0))}),range:range)
+        MappedParameterSlider(model:model,key:key,title:title,range:range)
     }
     private func boolBinding(_ key:String)->Binding<Bool> {Binding(get:{model.value(key)>0.5},set:{model.setValue(key,$0 ? 1:0)})}
     private func labeled<V:View>(_ title:String,@ViewBuilder content:()->V)->some View {
@@ -348,18 +336,6 @@ private struct OrbitSettingsPanel: View {
     }
 }
 
-private struct OrbitSlider:View {
-    let title:String
-    @Binding var value:Double
-    var range:ClosedRange<Double>=0...1
-    var suffix:String=""
-    var body:some View {
-        VStack(spacing:4) {
-            HStack {Text(title).foregroundStyle(.secondary);Spacer();Text(String(format:"%.2f",value)+suffix).monospacedDigit()}.font(.system(size:11))
-            Slider(value:$value,in:range).controlSize(.small)
-        }.frame(height:35)
-    }
-}
 private struct SensorDot:View {
     let sensor:SensorInput
     var body:some View {

@@ -11,6 +11,9 @@
 		319E46BB462C32B7629C07A4 /* OrbitTextureSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = B23ACF8A6EDC193ECA1207A0 /* OrbitTextureSource.swift */; };
 		4433AE7905B23E0F53F89077 /* OutputGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68ED161AE146F559867F4590 /* OutputGeometry.swift */; };
 		48822090527C5A268376AE8A /* ReferenceVideoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 017234CB6B16D3AD70918CEE /* ReferenceVideoView.swift */; };
+		49B9F29133ACBBAB25DC3E6D /* ParameterMappingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41FC26EB5348B65B7FDAE675 /* ParameterMappingView.swift */; };
+		49CBEE7CE26D0D6B540F5281 /* ControlOutput.swift in Sources */ = {isa = PBXBuildFile; fileRef = 260FEB427A3C3B0643D4E51F /* ControlOutput.swift */; };
+		5B4083000F7E1AE55E9B4ACF /* ParameterRouting.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD41E236F79EDE0F2637CC5A /* ParameterRouting.swift */; };
 		6AD4E83C3CF65EF2EDA5C33C /* MetalRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11E32FED746AE6ED06BF720 /* MetalRenderer.swift */; };
 		721B569C836139B2C61DED20 /* KakaoTalk_Video_2026-11-10-09-37-08.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = 75D42149EF4E1E7C3442ACEA /* KakaoTalk_Video_2026-11-10-09-37-08.mp4 */; };
 		848B88E74A505DA5835C60BF /* OrbitAppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = FFFC97DCF2880340E48CD95A /* OrbitAppIcon.icns */; };
@@ -29,8 +32,10 @@
 /* Begin PBXFileReference section */
 		017234CB6B16D3AD70918CEE /* ReferenceVideoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReferenceVideoView.swift; sourceTree = "<group>"; };
 		1C8A50C94742D7DA18CF8FB1 /* OrbitModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrbitModel.swift; sourceTree = "<group>"; };
+		260FEB427A3C3B0643D4E51F /* ControlOutput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlOutput.swift; sourceTree = "<group>"; };
 		332AC379A0E28B5E029787A2 /* OrbitLogo.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = OrbitLogo.png; sourceTree = "<group>"; };
 		3A70140ADF511300B34F9BA1 /* golden-drift-reference.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "golden-drift-reference.png"; sourceTree = "<group>"; };
+		41FC26EB5348B65B7FDAE675 /* ParameterMappingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParameterMappingView.swift; sourceTree = "<group>"; };
 		442ABBD99849283C21E7F61F /* OSCReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OSCReceiver.swift; sourceTree = "<group>"; };
 		49871CDB0B18BD84E815765F /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		4B03381080881BF0E1A2C350 /* spectral-fragments-reference.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "spectral-fragments-reference.png"; sourceTree = "<group>"; };
@@ -44,6 +49,7 @@
 		B11E32FED746AE6ED06BF720 /* MetalRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalRenderer.swift; sourceTree = "<group>"; };
 		B23ACF8A6EDC193ECA1207A0 /* OrbitTextureSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrbitTextureSource.swift; sourceTree = "<group>"; };
 		CFBAF8129D2DC544A2451FB4 /* textures */ = {isa = PBXFileReference; lastKnownFileType = folder; name = textures; path = ../OrbitTextures/textures; sourceTree = SOURCE_ROOT; };
+		DD41E236F79EDE0F2637CC5A /* ParameterRouting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParameterRouting.swift; sourceTree = "<group>"; };
 		FFFC97DCF2880340E48CD95A /* OrbitAppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = OrbitAppIcon.icns; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -93,6 +99,7 @@
 			isa = PBXGroup;
 			children = (
 				49871CDB0B18BD84E815765F /* ContentView.swift */,
+				260FEB427A3C3B0643D4E51F /* ControlOutput.swift */,
 				B11E32FED746AE6ED06BF720 /* MetalRenderer.swift */,
 				ADFAA53066E70B7AA6CD3986 /* OrbitApp.swift */,
 				1C8A50C94742D7DA18CF8FB1 /* OrbitModel.swift */,
@@ -100,6 +107,8 @@
 				442ABBD99849283C21E7F61F /* OSCReceiver.swift */,
 				68ED161AE146F559867F4590 /* OutputGeometry.swift */,
 				AB8BB74462AC42160005915D /* OutputWindowController.swift */,
+				41FC26EB5348B65B7FDAE675 /* ParameterMappingView.swift */,
+				DD41E236F79EDE0F2637CC5A /* ParameterRouting.swift */,
 				017234CB6B16D3AD70918CEE /* ReferenceVideoView.swift */,
 			);
 			path = Sources;
@@ -183,6 +192,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				8DC5BD10D27A221949CB860F /* ContentView.swift in Sources */,
+				49CBEE7CE26D0D6B540F5281 /* ControlOutput.swift in Sources */,
 				6AD4E83C3CF65EF2EDA5C33C /* MetalRenderer.swift in Sources */,
 				9B98678E642671FB812C13BE /* OSCReceiver.swift in Sources */,
 				C0BC95029586B3FBB9B29D4A /* OrbitApp.swift in Sources */,
@@ -190,6 +200,8 @@
 				319E46BB462C32B7629C07A4 /* OrbitTextureSource.swift in Sources */,
 				4433AE7905B23E0F53F89077 /* OutputGeometry.swift in Sources */,
 				A75402C429AFB995A4186408 /* OutputWindowController.swift in Sources */,
+				49B9F29133ACBBAB25DC3E6D /* ParameterMappingView.swift in Sources */,
+				5B4083000F7E1AE55E9B4ACF /* ParameterRouting.swift in Sources */,
 				48822090527C5A268376AE8A /* ReferenceVideoView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -252,7 +264,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -267,7 +279,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1.2;
+				MARKETING_VERSION = 0.2.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -333,7 +345,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -354,7 +366,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1.2;
+				MARKETING_VERSION = 0.2.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

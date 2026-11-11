@@ -16,31 +16,6 @@ struct SceneDescriptor: Decodable, Identifiable {
 }
 struct SceneManifest: Decodable { let scenes: [SceneDescriptor] }
 
-struct SensorInput: Identifiable, Codable {
-    var id = UUID()
-    var name: String
-    var address: String
-    var argument = 0
-    var minimum: Double = 0
-    var maximum: Double = 100
-    var value: Double?
-    var receivedAt: Date?
-}
-struct SensorMapping: Codable, Equatable {
-    var sensorID: UUID?
-    var target = "energy"
-    var minimum: Double = 0.25
-    var maximum: Double = 0.9
-    var smoothingSeconds: Double = 8
-    var enabled = false
-}
-struct SceneSettings: Codable {
-    var values: [String: Float]
-    var speed: Float
-    var mapping = SensorMapping()
-    var useTexture: Bool?
-    var textureMapping: SensorMapping?
-}
 struct StoredSettings: Codable {
     var sensors: [SensorInput]
     var scenes: [String: SceneSettings]
@@ -60,7 +35,7 @@ struct OutputDisplay: Identifiable {
 final class OrbitModel: ObservableObject {
     @Published var scenes: [SceneDescriptor] = []
     @Published var selectedSceneID = "07_spectral_fragments" {
-        didSet { comparison.stop(); textureSource?.reset(); textureStatus = "텍스처 준비 중"; restartPlayback(); smoothedValues.removeAll() }
+        didSet { comparison.stop(); textureSource?.reset(); textureStatus = "텍스처 준비 중"; restartPlayback(); resetParameterState() }
     }
     @Published var settings: [String: SceneSettings] = [:]
     @Published var sensors = [
@@ -89,12 +64,20 @@ final class OrbitModel: ObservableObject {
     @Published var outputStatus = "출력 꺼짐"
     @Published var fps: Double = 0
     @Published var textureStatus = "텍스처 준비 중"
+    @Published private(set) var parameterValues: [String:Double] = [:]
+    @Published var controlOutputEnabled = false {
+        didSet { controlOutput.reset(); controlOutputStatus = controlOutputEnabled ? "제어 송신 대기" : "제어 자동 송신 꺼짐" }
+    }
+    @Published var controlOutputStatus = "제어 자동 송신 꺼짐"
     let receiver = OSCReceiver()
+    let controlOutput = ControlOutput()
     let comparison = ComparisonPlayback()
     let textureSource = OrbitGPU.shared.device.map { OrbitTextureSource(device:$0) }
     private var phaseTime: Double = 0
     private var lastTime = CACurrentMediaTime()
-    private var smoothedValues: [String: Float] = [:]
+    private var parameterResolver = ParameterResolver()
+    private var controlTimer: Timer?
+    private var lastControlTime = CACurrentMediaTime()
     private var outputController: OrbitOutputWindowController?
     private var outputPresentationTime: CFTimeInterval = 0
     private var frameCount = 0
@@ -109,8 +92,12 @@ final class OrbitModel: ObservableObject {
     }
     var usesTexture: Bool { selectedScene?.texture != nil && (activeSettings.useTexture ?? false) }
     var renderStyle: Int { usesTexture ? 1 : 0 }
-    var mapping: SensorMapping { usesTexture ? (activeSettings.textureMapping ?? SensorMapping()) : activeSettings.mapping }
-    var playbackSpeed: Float { usesTexture ? (activeSettings.values["texture.speed"] ?? 1) : activeSettings.speed }
+    var activeRoutes: [String:ParameterRoute] {
+        (usesTexture ? activeSettings.textureParameterRoutes : activeSettings.parameterRoutes) ?? [:]
+    }
+    var manualPlaybackSpeed: Float { usesTexture ? (activeSettings.values["texture.speed"] ?? 1) : activeSettings.speed }
+    var playbackSpeed: Float { Float(parameterValues["speed"] ?? Double(manualPlaybackSpeed)) }
+    var activeControlOutputCount: Int { activeRoutes.values.filter { $0.output.enabled }.count }
     var playbackTimeLabel: String {
         let tenths = Int(max(0,playbackSeconds)*10)
         return String(format:"%02d:%02d.%d",tenths/600,(tenths/10)%60,tenths%10)
@@ -153,6 +140,8 @@ final class OrbitModel: ObservableObject {
                     settings[key]?.mapping = value.mapping
                     settings[key]?.useTexture = stored.rendererRevision == 3 ? value.useTexture : false
                     settings[key]?.textureMapping = value.textureMapping
+                    settings[key]?.parameterRoutes = value.parameterRoutes
+                    settings[key]?.textureParameterRoutes = value.textureParameterRoutes
                     if stored.motionRevision != 2 {
                         // Migrate only the old supplied defaults; preserve deliberate user adjustments.
                         let oldSpeeds: [String: Float] = ["01_chroma_flow":0.75,"02_solar_bands":0.65,
@@ -178,6 +167,7 @@ final class OrbitModel: ObservableObject {
                 customOutputWidth = OutputGeometry.normalizedWidth(stored.customOutputWidth ?? 1920)
             }
         } catch { errorMessage = error.localizedDescription }
+        for key in Array(settings.keys) { settings[key]?.migrateRoutes(scene:key) }
         textureSource?.onReady = { [weak self] in self?.textureStatus = "텍스처 재생 준비됨" }
         textureSource?.onError = { [weak self] message in
             self?.textureStatus = "텍스처 읽기 실패"; self?.errorMessage = message
@@ -202,26 +192,45 @@ final class OrbitModel: ObservableObject {
             .debounce(for: .milliseconds(400), scheduler: RunLoop.main)
             .sink { [weak self] _ in self?.save() }.store(in: &saves)
         $selectedDisplayID.dropFirst().removeDuplicates().sink { [weak self] _ in self?.stopOutput() }.store(in: &saves)
+        controlOutput.onStatus = { [weak self] status in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if self.controlOutputEnabled || status.contains("테스트") || status.contains("준비") || status.contains("실패") {
+                    self.controlOutputStatus = status
+                }
+            }
+        }
+        controlOutput.prepare()
+        refreshParameters(delta:0)
+        let timer = Timer(timeInterval:1.0/30.0,repeats:true) { [weak self] _ in
+            guard let self else { return }
+            let now = CACurrentMediaTime()
+            self.refreshParameters(delta:max(0,now-self.lastControlTime)); self.lastControlTime = now
+        }
+        RunLoop.main.add(timer,forMode:.common); controlTimer = timer
     }
 
     func save() {
         let data = try? JSONEncoder().encode(StoredSettings(sensors: sensors, scenes: settings, port: port, motionRevision: 2, rendererRevision: 3, outputResolution: outputResolution, customOutputWidth: customOutputWidth))
         if let data { UserDefaults.standard.set(data, forKey: "OrbitSettings.v1") }
     }
-    func value(_ name: String) -> Float { effectiveValues[name] ?? 0 }
+    func value(_ name: String) -> Float { Float(parameterValues[name] ?? Double(effectiveValues[name] ?? 0)) }
+    func baseParameterValue(_ key: String) -> Double { key == "speed" ? Double(manualPlaybackSpeed) : Double(effectiveValues[key] ?? 0) }
     func setValue(_ name: String, _ value: Float) {
         guard value.isFinite else { return }
         let key = usesTexture && textureDefaults[name] != nil ? "texture." + name : name
         settings[selectedSceneID]?.values[key] = value
+        refreshParameters(delta:0)
     }
     func setSpeed(_ speed: Float) {
         if usesTexture { settings[selectedSceneID]?.values["texture.speed"] = speed }
         else { settings[selectedSceneID]?.speed = speed }
+        refreshParameters(delta:0)
     }
     func setTextureMode(_ enabled: Bool) {
         settings[selectedSceneID]?.useTexture = enabled
         textureSource?.reset(); textureStatus = "텍스처 준비 중"
-        comparison.stop(); restartPlayback(); smoothedValues.removeAll()
+        comparison.stop(); restartPlayback(); resetParameterState()
     }
     func setRenderStyle(_ style: Int) {
         setTextureMode(style == 1)
@@ -238,7 +247,7 @@ final class OrbitModel: ObservableObject {
             for (name, value) in textureDefaults { updated.values["texture." + name] = value }
             updated.values["texture.speed"] = 1
             settings[selectedSceneID] = updated
-            restartPlayback(); smoothedValues.removeAll()
+            restartPlayback(); resetParameterState()
             return
         }
         // Keep the installation's orientation and sensor routing intact.
@@ -247,12 +256,58 @@ final class OrbitModel: ObservableObject {
         for name in appearance { updated.values[name] = scene.defaults[name] }
         updated.speed = scene.defaultClockSpeed
         settings[selectedSceneID] = updated
-        restartPlayback(); smoothedValues.removeAll()
+        restartPlayback(); resetParameterState()
     }
-    func setMapping(_ update: (inout SensorMapping) -> Void) {
-        var m = mapping; update(&m)
-        if usesTexture { settings[selectedSceneID]?.textureMapping = m }
-        else { settings[selectedSceneID]?.mapping = m }
+    func route(for key: String) -> ParameterRoute {
+        activeRoutes[key] ?? ParameterRoute.defaults(scene:selectedSceneID,parameter:key)
+    }
+    func setRoute(_ key: String, _ update: (inout ParameterRoute) -> Void) {
+        var route = route(for:key); let prior = route; update(&route)
+        let spec = ParameterSpec.find(key)
+        route.input.minimum = spec.clamp(route.input.minimum)
+        route.input.maximum = spec.clamp(route.input.maximum)
+        route.input.smoothingSeconds = route.input.smoothingSeconds.isFinite ? min(30,max(0,route.input.smoothingSeconds)) : 8
+        if !route.output.minimum.isFinite { route.output.minimum = prior.output.minimum }
+        if !route.output.maximum.isFinite { route.output.maximum = prior.output.maximum }
+        var scene = activeSettings; var routes = activeRoutes; routes[key] = route
+        if usesTexture { scene.textureParameterRoutes = routes } else { scene.parameterRoutes = routes }
+        settings[selectedSceneID] = scene
+        refreshParameters(delta:0)
+    }
+    func outputIssue(for key: String) -> String? {
+        let route = route(for:key).output
+        if let issue = route.validationError { return issue }
+        if let other = activeRoutes.first(where: { $0.key != key && $0.value.output.enabled && $0.value.output.destinationKey == route.destinationKey }) {
+            return "\(ParameterSpec.find(other.key).title)와 출력 주소가 겹칩니다. 채널·CC 또는 OSC 주소를 바꾸세요."
+        }
+        return nil
+    }
+    func testControlOutput(_ key: String) {
+        guard let spec = ParameterSpec.all.first(where: { $0.id == key }), outputIssue(for:key) == nil else { return }
+        // Isolate this parameter during Live's MIDI learn, even if other routes were transmitting.
+        controlOutputEnabled = false
+        let route = route(for:key).output
+        if let value = route.mappedValue(parameterValues[key] ?? baseParameterValue(key),spec:spec) {
+            controlOutput.send([ControlEmission(id:key,route:route,value:value)],force:true)
+        }
+    }
+    private func resetParameterState() {
+        parameterResolver.reset(); controlOutput.reset(); lastControlTime = CACurrentMediaTime()
+        refreshParameters(delta:0)
+    }
+    private func refreshParameters(delta: Double) {
+        var base = effectiveValues.mapValues(Double.init); base["speed"] = Double(manualPlaybackSpeed)
+        let routes = selectedScene?.testScene == false ? activeRoutes : [:]
+        var resolved = parameterResolver.resolve(base:base,routes:routes,sensors:sensors,now:Date(),delta:delta)
+        if usesTexture { resolved["markerWidth"] = (resolved["rotation"] ?? 0)*0.1 }
+        if parameterValues != resolved { parameterValues = resolved }
+        guard controlOutputEnabled else { return }
+        let emissions = ParameterSpec.all.compactMap { spec -> ControlEmission? in
+            guard let route = routes[spec.id]?.output, route.enabled, outputIssue(for:spec.id) == nil,
+                  let value = route.mappedValue(resolved[spec.id] ?? baseParameterValue(spec.id),spec:spec) else { return nil }
+            return ControlEmission(id:"\(selectedSceneID):\(renderStyle):\(spec.id)",route:route,value:value)
+        }
+        controlOutput.send(emissions)
     }
     func addSensor() {
         sensors.append(SensorInput(name: "센서 \(sensors.count + 1)", address: "/park/sensor/\(sensors.count + 1)"))
@@ -281,26 +336,8 @@ final class OrbitModel: ObservableObject {
     func uniforms(width: Float, height: Float, view: Float) -> [Float] {
         // A shared monotonic clock for every preview and output. Rendering delays must not slow time.
         let now = CACurrentMediaTime(); let delta = max(0, now - lastTime); lastTime = now
-        var values = effectiveValues
-        var speed = playbackSpeed
-        let m = mapping
-        if m.enabled, selectedScene?.testScene == false,
-           let sensor = sensors.first(where: { $0.id == m.sensorID }),
-           let raw = sensor.value, let received = sensor.receivedAt {
-            let base = m.target == "speed" ? playbackSpeed : (values[m.target] ?? 0)
-            var target = base
-            if Date().timeIntervalSince(received) < 90, sensor.maximum > sensor.minimum {
-                let n = max(0, min(1, (raw - sensor.minimum) / (sensor.maximum - sensor.minimum)))
-                target = Float(m.minimum + n * (m.maximum - m.minimum))
-            }
-            let maximum: Float = m.target == "speed" ? 3 : 1
-            target = max(0, min(maximum, target))
-            let prior = smoothedValues[m.target] ?? base
-            let blend = m.smoothingSeconds <= 0 ? 1 : 1 - exp(-delta * 3 / m.smoothingSeconds)
-            let smoothed = prior + (target - prior) * Float(blend)
-            smoothedValues[m.target] = smoothed
-            if m.target == "speed" { speed = smoothed } else { values[m.target] = smoothed }
-        }
+        let values = parameterValues.mapValues(Float.init)
+        let speed = playbackSpeed
         if playing { phaseTime += delta * Double(speed) }
         if usesTexture, let scene = selectedScene, let original = scene.texture {
             let texture = original
@@ -384,5 +421,9 @@ final class OrbitModel: ObservableObject {
     private func clearOutputState() {
         outputActive = false; outputOpen = false; outputFullscreen = false
         outputRenderSize = .zero; outputScreenName = ""; outputStatus = "출력 꺼짐"
+    }
+    deinit {
+        controlTimer?.invalidate(); heartbeat?.invalidate()
+        if let displayObserver { NotificationCenter.default.removeObserver(displayObserver) }
     }
 }
