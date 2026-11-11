@@ -140,6 +140,12 @@ struct ContentView: View {
                 Text(model.selectedScene?.testScene == true ? "LED TEST" : (model.usesTexture ? "원본 재생 조절" : "\(model.selectedScene?.name ?? "") · 파라미터 \(model.shaderParameters.count)개"))
                     .font(.system(size:11,weight:.semibold)).accessibilityIdentifier("sceneParameterCount")
                 Spacer()
+                if model.selectedScene?.testScene == false {
+                    Button {model.resetSceneAppearance()} label:{Label("초기값 복원",systemImage:"arrow.counterclockwise")}
+                        .accessibilityIdentifier("resetSceneAppearance")
+                        .accessibilityLabel("\(model.selectedScene?.name ?? "") 초기값 복원")
+                        .help("현재 씬의 조절값과 재생 속도를 초기값으로 복원합니다. 센서·출력 매핑과 링 방향은 유지되며, 활성 센서 입력은 계속 적용됩니다.")
+                }
                 Button {panel = .look} label:{Label(model.usesTexture ? "원본 조절" : "공통 조절",systemImage:"slider.horizontal.3")}
                     .disabled(model.selectedScene?.testScene == true).accessibilityIdentifier("openLook")
             }.frame(height:22)
