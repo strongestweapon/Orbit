@@ -26,6 +26,9 @@ struct ParameterSpec: Identifiable {
     let title: String
     var range: ClosedRange<Double> = 0...1
     var isSwitch = false
+    var detail = ""
+    var unit = ""
+    var defaultCC: Int?
     static let all: [ParameterSpec] = [
         .init(id:"speed",title:"속도",range:0...3), .init(id:"brightness",title:"밝기"),
         .init(id:"energy",title:"에너지"), .init(id:"density",title:"밀도"),
@@ -40,6 +43,24 @@ struct ParameterSpec: Identifiable {
     func clamp(_ value: Double) -> Double {
         let number = value.isFinite ? min(range.upperBound,max(range.lowerBound,value)) : range.lowerBound
         return isSwitch ? (number >= 0.5 ? 1 : 0) : number
+    }
+}
+
+/// Public shader controls are separate from the stable GPU buffer slots.
+struct ShaderParameter: Decodable, Identifiable {
+    let id: String
+    let title: String
+    let detail: String
+    let uniform: String
+    let defaultValue: Double
+    let minimum: Double
+    let maximum: Double
+    let group: Int
+    let quick: Bool
+    let unit: String
+    let legacyKey: String?
+    func spec(index: Int) -> ParameterSpec {
+        ParameterSpec(id:id,title:title,range:minimum...maximum,detail:detail,unit:unit,defaultCC:40+index)
     }
 }
 
@@ -99,11 +120,11 @@ struct ParameterOutputRoute: Codable, Equatable {
 struct ParameterRoute: Codable, Equatable {
     var input = ParameterInputRoute()
     var output = ParameterOutputRoute()
-    static func defaults(scene: String, parameter: String) -> ParameterRoute {
-        let spec = ParameterSpec.find(parameter)
+    static func defaults(scene: String, parameter: String, spec supplied: ParameterSpec? = nil) -> ParameterRoute {
+        let spec = supplied ?? ParameterSpec.find(parameter)
         var route = ParameterRoute()
         route.input.minimum = spec.range.lowerBound; route.input.maximum = spec.range.upperBound
-        route.output.controller = 20 + (ParameterSpec.all.firstIndex { $0.id == parameter } ?? 0)
+        route.output.controller = spec.defaultCC ?? (20 + (ParameterSpec.all.firstIndex { $0.id == parameter } ?? 0))
         route.output.address = "/orbit/\(scene)/\(parameter)"
         return route
     }
@@ -122,6 +143,17 @@ struct SceneSettings: Codable {
         if parameterRoutes == nil { parameterRoutes = migrate(mapping,scene:scene) }
         if textureParameterRoutes == nil { textureParameterRoutes = migrate(textureMapping,scene:scene) }
     }
+    mutating func migrateShaderParameters(_ parameters: [ShaderParameter]) {
+        // Preserve explicit new values and endpoints. Texture playback keeps its own controls.
+        for parameter in parameters {
+            guard let old = parameter.legacyKey else { continue }
+            if values[parameter.id] == nil, let value = values[old] { values[parameter.id] = value }
+            if parameterRoutes?[parameter.id] == nil, let route = parameterRoutes?[old] {
+                parameterRoutes?[parameter.id] = route
+            }
+            parameterRoutes?.removeValue(forKey:old)
+        }
+    }
     private func migrate(_ legacy: SensorMapping?, scene: String) -> [String:ParameterRoute] {
         guard let legacy, legacy.enabled || legacy.sensorID != nil else { return [:] }
         var route = ParameterRoute.defaults(scene:scene,parameter:legacy.target)
@@ -136,9 +168,9 @@ struct ParameterResolver {
     private var smoothed: [String:Double] = [:]
     mutating func reset() { smoothed.removeAll() }
     mutating func resolve(base: [String:Double], routes: [String:ParameterRoute], sensors: [SensorInput],
-                          now: Date, delta: Double) -> [String:Double] {
+                          now: Date, delta: Double, specs: [ParameterSpec] = ParameterSpec.all) -> [String:Double] {
         var result = base
-        for spec in ParameterSpec.all {
+        for spec in specs {
             guard let rawBase = base[spec.id] else { continue }
             let fallback = spec.clamp(rawBase)
             guard let route = routes[spec.id]?.input, route.enabled else {

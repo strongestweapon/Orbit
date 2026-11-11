@@ -1,6 +1,6 @@
 /*{
   "ISFVSN": "2.0",
-  "VSN": "1.3.0",
+  "VSN": "1.4.0",
   "DESCRIPTION": "청백색 코로나 / Electric Corona",
   "CREDIT": "SUPERLESS / Orbit project; procedural study based on supplied reference video",
   "CATEGORIES": [
@@ -45,30 +45,6 @@
       "DEFAULT": 0,
       "MIN": 0,
       "MAX": 86400
-    },
-    {
-      "NAME": "density",
-      "LABEL": "density",
-      "TYPE": "float",
-      "DEFAULT": 0.6,
-      "MIN": 0,
-      "MAX": 1
-    },
-    {
-      "NAME": "turbulence",
-      "LABEL": "turbulence",
-      "TYPE": "float",
-      "DEFAULT": 0.7,
-      "MIN": 0,
-      "MAX": 1
-    },
-    {
-      "NAME": "energy",
-      "LABEL": "energy",
-      "TYPE": "float",
-      "DEFAULT": 0.62,
-      "MIN": 0,
-      "MAX": 1
     },
     {
       "NAME": "hueShift",
@@ -153,6 +129,54 @@
       "DEFAULT": 0.0,
       "MIN": 0,
       "MAX": 1
+    },
+    {
+      "NAME": "filamentLength",
+      "LABEL": "코로나 길이",
+      "TYPE": "float",
+      "DEFAULT": 1,
+      "MIN": 0.1,
+      "MAX": 1.5
+    },
+    {
+      "NAME": "filamentDensity",
+      "LABEL": "필라멘트 밀도",
+      "TYPE": "float",
+      "DEFAULT": 0.6,
+      "MIN": 0,
+      "MAX": 1
+    },
+    {
+      "NAME": "filamentBend",
+      "LABEL": "필라멘트 휘어짐",
+      "TYPE": "float",
+      "DEFAULT": 0.7,
+      "MIN": 0,
+      "MAX": 1
+    },
+    {
+      "NAME": "dischargeIntensity",
+      "LABEL": "방전 강도",
+      "TYPE": "float",
+      "DEFAULT": 0.62,
+      "MIN": 0,
+      "MAX": 1
+    },
+    {
+      "NAME": "filamentWidth",
+      "LABEL": "필라멘트 두께",
+      "TYPE": "float",
+      "DEFAULT": 1,
+      "MIN": 0.25,
+      "MAX": 2.5
+    },
+    {
+      "NAME": "rootGlow",
+      "LABEL": "안쪽 광륜",
+      "TYPE": "float",
+      "DEFAULT": 1,
+      "MIN": 0,
+      "MAX": 2
     }
   ]
 }*/
@@ -181,6 +205,11 @@ struct OrbitParams {
     float gapSoftness;
     float gapMotion;
     float fragmentation;
+    // Scene-specific shape controls; see config/scenes.json.
+    float shape0;
+    float shape1;
+    float shape2;
+    float shape3;
 };
 
 float orbitHash(vec3 p) {
@@ -281,9 +310,9 @@ vec3 orbitShade(vec2 uv, OrbitParams p) {
     vec3 q = orbitCircle(bent, uv.y * 0.52, 74.0 + p.density * 100.0, -t * 0.7, p.seed + 4.0);
     float strand = 0.68 * orbitNoise(q) + 0.32 * orbitNoise(q * 2.07 + 9.8);
     float fine = orbitNoise(orbitCircle(bent, uv.y * 3.2, 300.0, -t * 1.5, p.seed));
-    float fiber = smoothstep(0.20,0.80,strand);
-    float ridge = pow(1.0 - abs(2.0 * strand - 1.0), 12.0) * 0.10;
-    float length = 0.38 + 0.72 * orbitNoise(orbitCircle(u,0.0,23.0,-t * 0.16,p.seed));
+    float fiber = pow(smoothstep(0.20,0.80,strand),1.0/max(p.shape1,0.05));
+    float ridge = pow(1.0 - abs(2.0 * strand - 1.0), 12.0/max(p.shape1,0.05)) * 0.10;
+    float length = (0.38 + 0.72 * orbitNoise(orbitCircle(u,0.0,23.0,-t * 0.16,p.seed))) * p.shape0;
     float plume = 1.0 - smoothstep(length - 0.25, length + 0.15, uv.y);
     float root = exp(-uv.y * 11.0);
     float purple = orbitNoise(orbitCircle(u,0.0,2.4,t * 0.07,p.seed + 7.0));
@@ -292,7 +321,7 @@ vec3 orbitShade(vec2 uv, OrbitParams p) {
     vec3 ice = orbitHsv(0.59 + p.hueShift,0.13,1.0);
     vec3 col = cold * (0.48 + strand * 0.85);
     float detail = (fiber * (0.5 + fine * 0.6) + ridge) * plume;
-    col += ice * (detail * (0.65 + p.energy * 0.65) + root * 1.05);
+    col += ice * (detail * (0.65 + p.energy * 0.65) + root * 1.05 * p.shape2);
     col += ice * pow(fine,7.0) * plume * 0.5;
     return col * 1.08 * orbitBandEdge(uv.y);
 }
@@ -303,9 +332,9 @@ void main() {
     p.outputHeight = RENDERSIZE.y;
     p.viewMode = float(viewMode);
     p.phaseTime = externalClock ? clockSeconds : TIME * speed;
-    p.density = density;
-    p.turbulence = turbulence;
-    p.energy = energy;
+    p.density = filamentDensity;
+    p.turbulence = filamentBend;
+    p.energy = dischargeIntensity;
     p.hueShift = hueShift;
     p.brightness = brightness;
     p.seed = seed;
@@ -319,6 +348,10 @@ void main() {
     p.gapSoftness = gapSoftness;
     p.gapMotion = gapMotion;
     p.fragmentation = fragmentation;
+    p.shape0 = filamentLength;
+    p.shape1 = filamentWidth;
+    p.shape2 = rootGlow;
+    p.shape3 = 1.0;
     vec2 pixel = vec2(isf_FragNormCoord.x, 1.0-isf_FragNormCoord.y) * RENDERSIZE;
     vec3 uv = orbitCoordinates(pixel, p);
     float presence = orbitPresence(uv.xy, p);

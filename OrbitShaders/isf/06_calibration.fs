@@ -1,6 +1,6 @@
 /*{
   "ISFVSN": "2.0",
-  "VSN": "1.3.0",
+  "VSN": "1.4.0",
   "DESCRIPTION": "LED 테스트 패턴 / Calibration",
   "CREDIT": "SUPERLESS / Orbit project; procedural study based on supplied reference video",
   "CATEGORIES": [
@@ -219,6 +219,11 @@ struct OrbitParams {
     float gapSoftness;
     float gapMotion;
     float fragmentation;
+    // Scene-specific shape controls; see config/scenes.json.
+    float shape0;
+    float shape1;
+    float shape2;
+    float shape3;
 };
 
 float orbitHash(vec3 p) {
@@ -387,6 +392,10 @@ void main() {
     p.gapSoftness = gapSoftness;
     p.gapMotion = gapMotion;
     p.fragmentation = fragmentation;
+    p.shape0 = 1.0;
+    p.shape1 = 1.0;
+    p.shape2 = 1.0;
+    p.shape3 = 1.0;
     vec2 pixel = vec2(isf_FragNormCoord.x, 1.0-isf_FragNormCoord.y) * RENDERSIZE;
     vec3 uv = orbitCoordinates(pixel, p);
     float presence = 1.0;

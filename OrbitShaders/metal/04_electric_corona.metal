@@ -30,6 +30,11 @@ struct OrbitParams {
     float gapSoftness;
     float gapMotion;
     float fragmentation;
+    // Scene-specific shape controls; see config/scenes.json.
+    float shape0;
+    float shape1;
+    float shape2;
+    float shape3;
 };
 
 float orbitHash(vec3 p) {
@@ -130,9 +135,9 @@ vec3 orbitShade(vec2 uv, OrbitParams p) {
     vec3 q = orbitCircle(bent, uv.y * 0.52, 74.0 + p.density * 100.0, -t * 0.7, p.seed + 4.0);
     float strand = 0.68 * orbitNoise(q) + 0.32 * orbitNoise(q * 2.07 + 9.8);
     float fine = orbitNoise(orbitCircle(bent, uv.y * 3.2, 300.0, -t * 1.5, p.seed));
-    float fiber = smoothstep(0.20,0.80,strand);
-    float ridge = pow(1.0 - abs(2.0 * strand - 1.0), 12.0) * 0.10;
-    float length = 0.38 + 0.72 * orbitNoise(orbitCircle(u,0.0,23.0,-t * 0.16,p.seed));
+    float fiber = pow(smoothstep(0.20,0.80,strand),1.0/max(p.shape1,0.05));
+    float ridge = pow(1.0 - abs(2.0 * strand - 1.0), 12.0/max(p.shape1,0.05)) * 0.10;
+    float length = (0.38 + 0.72 * orbitNoise(orbitCircle(u,0.0,23.0,-t * 0.16,p.seed))) * p.shape0;
     float plume = 1.0 - smoothstep(length - 0.25, length + 0.15, uv.y);
     float root = exp(-uv.y * 11.0);
     float purple = orbitNoise(orbitCircle(u,0.0,2.4,t * 0.07,p.seed + 7.0));
@@ -141,7 +146,7 @@ vec3 orbitShade(vec2 uv, OrbitParams p) {
     vec3 ice = orbitHsv(0.59 + p.hueShift,0.13,1.0);
     vec3 col = cold * (0.48 + strand * 0.85);
     float detail = (fiber * (0.5 + fine * 0.6) + ridge) * plume;
-    col += ice * (detail * (0.65 + p.energy * 0.65) + root * 1.05);
+    col += ice * (detail * (0.65 + p.energy * 0.65) + root * 1.05 * p.shape2);
     col += ice * pow(fine,7.0) * plume * 0.5;
     return col * 1.08 * orbitBandEdge(uv.y);
 }

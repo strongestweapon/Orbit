@@ -78,7 +78,7 @@ final class OrbitRenderer: NSObject, MTKViewDelegate {
             guard let encoder = command.makeRenderCommandEncoder(descriptor: descriptor) else { return }
             encoder.setRenderPipelineState(pipeline)
             uniforms.withUnsafeBytes { bytes in
-                encoder.setFragmentBytes(bytes.baseAddress!, length: 80, index: 0)
+                encoder.setFragmentBytes(bytes.baseAddress!, length: bytes.count, index: 0)
             }
             if model.usesTexture {
                 if let frame = textureFrame, frame.sceneID == scene.id {

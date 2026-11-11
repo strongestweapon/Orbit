@@ -3,6 +3,7 @@
 import json
 from build_texture_shader import build_texture_shader
 from pathlib import Path
+from scene_parameters import PARAMETERS
 
 ROOT = Path(__file__).resolve().parents[1]
 SCENES = [
@@ -32,7 +33,7 @@ PATTERNS = ['Segments 1-5 + direction', '100x50 pixel grid', 'Inner red / outer 
             'Segment seams', 'Single-pixel checker']
 LAYOUT = ['outputWidth','outputHeight','viewMode','phaseTime','density','turbulence',
           'energy','hueShift','brightness','seed','angleOffset','flipU','flipV',
-          'ringWidth','testPattern','markerWidth','coverage','gapSoftness','gapMotion','fragmentation']
+          'ringWidth','testPattern','markerWidth','coverage','gapSoftness','gapMotion','fragmentation','shape0','shape1','shape2','shape3']
 
 def float_input(name, default, minimum, maximum, label=None):
     return dict(NAME=name, LABEL=label or name, TYPE='float', DEFAULT=default, MIN=minimum, MAX=maximum)
@@ -43,17 +44,17 @@ def main():
     textures = json.loads(texture_file.read_text())['textures'] if texture_file.exists() else {}
     for folder in ['metal','isf','config','previews']:
         (ROOT/folder).mkdir(exist_ok=True)
-    manifest = {'schemaVersion':2, 'referenceVideo':'KakaoTalk_Video_2026-11-10-09-37-08.mp4',
+    manifest = {'schemaVersion':3, 'referenceVideo':'KakaoTalk_Video_2026-11-10-09-37-08.mp4',
       'logicalRing':[15444,300], 'packedRegion':[3564,1500], 'outputCanvas':[3840,2160],
       'views':{'strip':0,'ring':1,'packed4k':2},
       'coordinates':{'origin':'top-left','u':'clockwise from twelve oclock','v':'inner to outer'},
-      'uniformBuffer':{'sizeBytes':80,'type':'20 tightly packed float32 values','fields':LAYOUT},
+      'uniformBuffer':{'sizeBytes':96,'type':'24 tightly packed float32 values','fields':LAYOUT},
       'outputColor':'display-referred SDR RGB; RGBA8Unorm, no second sRGB encoding',
       'metalCompileOptions':{'fastMathEnabled':False},
       'parameterSchema':[
         {'id':'speed','target':'clock.speed','type':'float','min':0,'max':3},
         *[{'id':f,'target':'uniform.'+f,'type':'float','min':0,'max':1}
-          for f in ['density','turbulence','energy','brightness','coverage','gapSoftness','gapMotion','fragmentation']],
+          for f in ['brightness','coverage','gapSoftness','gapMotion','fragmentation']],
         {'id':'hueShift','target':'uniform.hueShift','type':'float','min':-0.5,'max':0.5}],
       'testPatterns':dict(enumerate(PATTERNS)), 'scenes':[]}
     for index, (sid,name,description,reference,speed,density,turbulence,energy) in enumerate(SCENES,1):
@@ -62,6 +63,9 @@ def main():
           density=density,turbulence=turbulence,energy=energy,hueShift=0,brightness=1,
           seed=3,angleOffset=0,flipU=0,flipV=0,ringWidth=0.128,testPattern=0,markerWidth=12)
         defaults.update(zip(['coverage','gapSoftness','gapMotion','fragmentation'],PRESENCE[sid]))
+        parameters = PARAMETERS.get(sid, [])
+        defaults.update({f'shape{i}':1.0 for i in range(4)})
+        defaults.update({p['id']:p['defaultValue'] for p in parameters})
         ns='OrbitScene'+str(index)
         entry='orbit_'+sid[3:]
         sample='''
@@ -115,7 +119,11 @@ fragment float4 {entry}_fragment(float4 position [[position]],
         if sid=='06_calibration':
             inputs += [dict(NAME='testPattern',LABEL='Test pattern',TYPE='long',DEFAULT=0,
                             VALUES=list(range(10)),LABELS=PATTERNS),float_input('markerWidth',12,1,300)]
-        meta={'ISFVSN':'2.0','VSN':'1.3.0','DESCRIPTION':description+' / '+name,
+        # Expose semantic IDs in ISF too; legacy slots remain internal.
+        replaced = {p['uniform'] for p in parameters}
+        inputs = [item for item in inputs if item['NAME'] not in replaced]
+        inputs += [float_input(p['id'],p['defaultValue'],p['minimum'],p['maximum'],p['title']) for p in parameters]
+        meta={'ISFVSN':'2.0','VSN':'1.4.0','DESCRIPTION':description+' / '+name,
               'CREDIT':'SUPERLESS / Orbit project; procedural study based on supplied reference video',
               'CATEGORIES':['Generator','Orbit'],'INPUTS':inputs}
         assignments='\n'.join('    p.'+f+' = '+expr+';' for f,expr in {
@@ -127,6 +135,11 @@ fragment float4 {entry}_fragment(float4 position [[position]],
           'testPattern':'float(testPattern)' if sid=='06_calibration' else '0.0',
           'markerWidth':'markerWidth' if sid=='06_calibration' else '12.0',
           **{f:f for f in ['coverage','gapSoftness','gapMotion','fragmentation']}}.items())
+        for p in parameters:
+            assignments = assignments.replace('p.'+p['uniform']+' = '+p['uniform']+';', 'p.'+p['uniform']+' = '+p['id']+';')
+        for slot in ['shape0','shape1','shape2','shape3']:
+            value = next((p['id'] for p in parameters if p['uniform']==slot),'1.0')
+            assignments += '\n    p.'+slot+' = '+value+';'
         isf='/*'+json.dumps(meta,ensure_ascii=False,indent=2)+'*/\n#define ORBIT_ATAN atan\n'+common+'\n'+src+'''
 void main() {
     OrbitParams p;
@@ -141,7 +154,7 @@ void main() {
         (ROOT/'isf'/f'{sid}.fs').write_text(isf)
         manifest['scenes'].append(dict(id=sid,name=name,description=description,referenceSeconds=reference,
             metal=f'metal/{sid}.metal',isf=f'isf/{sid}.fs',computeFunction=entry+'_compute',
-            fragmentFunction=entry+'_fragment',defaults=defaults,defaultClockSpeed=speed,
+            fragmentFunction=entry+'_fragment',parameters=parameters,defaults=defaults,defaultClockSpeed=speed,
             sensorMappingEnabled=sid!='06_calibration',testScene=sid=='06_calibration',referenceImage=STILLS.get(sid),texture=textures.get(sid)))
     (ROOT/'metal/OrbitFullscreen.metal').write_text('''#include <metal_stdlib>
 using namespace metal;
@@ -151,22 +164,24 @@ vertex float4 orbit_fullscreen_vertex(uint id [[vertex_id]]) {
 }
 ''')
     (ROOT/'config/scenes.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n')
-    mappings={'schemaVersion':1,'status':'example bindings; application must implement OSC receiving and smoothing',
+    mappings={'schemaVersion':1,'status':'example bindings; native app supports per-parameter OSC input and MIDI/OSC output',
       'osc':{'bindAddress':'0.0.0.0','udpPort':9000,'expectedIntervalSeconds':30,'staleAfterSeconds':90},
       'sensors':[{'id':'racing_speed','address':'/park/racing/speed','argument':0,'type':'float','range':[0,100]},
                  {'id':'visitors','address':'/park/visitors','argument':0,'type':'int','range':[0,500]}],
       'scenes':{}}
     for scene in manifest['scenes']:
         if scene['testScene']: mappings['scenes'][scene['id']]=[]; continue
+        density_control=next(p for p in scene['parameters'] if p['uniform']=='density')
+        energy_control=next(p for p in scene['parameters'] if p['uniform']=='energy')
         mappings['scenes'][scene['id']]=[
           {'sensor':'racing_speed','target':'clock.speed','outputRange':[0.25,1.5],
            'clamp':True,'smoothingSeconds':8,'staleTarget':scene['defaultClockSpeed']},
-          {'sensor':'visitors','target':'uniform.density','outputRange':[0.2,0.85],
+          {'sensor':'visitors','target':'parameter.'+density_control['id'],'outputRange':[0.2,0.85],
            'clamp':True,'smoothingSeconds':12,'staleTarget':scene['defaults']['density']},
-          {'sensor':'racing_speed','target':'uniform.energy','outputRange':[0.35,0.85],
+          {'sensor':'racing_speed','target':'parameter.'+energy_control['id'],'outputRange':[0.35,0.85],
            'clamp':True,'smoothingSeconds':8,'staleTarget':scene['defaults']['energy']}]
     (ROOT/'config/osc-mappings.example.json').write_text(json.dumps(mappings,ensure_ascii=False,indent=2)+'\n')
     build_texture_shader()
-    print(f'Built {len(SCENES)} Metal shaders and ISF generators; 80-byte uniform layout.')
+    print(f'Built {len(SCENES)} Metal shaders and ISF generators; 96-byte uniform layout.')
 
 if __name__=='__main__': main()

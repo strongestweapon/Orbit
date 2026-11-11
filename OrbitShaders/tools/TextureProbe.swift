@@ -29,7 +29,7 @@ struct ProbeFailure: Error { let message:String }
             throw ProbeFailure(message:"Timed out: \(id) at \(index)")
         }
         func render(_ frame:OrbitTextureFrame,_ w:Int,_ h:Int,_ mode:Float,_ brightness:Float=1,_ warp:Float=0) throws -> Data {
-            let values:[Float]=[Float(w),Float(h),mode,6,0.5,warp,0,0,brightness,3,0,0,0,0.128,0,0,1,0.8,0.25,0]
+            let values:[Float]=[Float(w),Float(h),mode,6,0.5,warp,0,0,brightness,3,0,0,0,0.128,0,0,1,0.8,0.25,0,1,1,1,1]
             let uniforms=device.makeBuffer(bytes:values,length:values.count*4,options:.storageModeShared)!
             let pixels=device.makeBuffer(length:w*h*4,options:.storageModeShared)!
             let command=queue.makeCommandBuffer()!;let encoder=command.makeComputeCommandEncoder()!

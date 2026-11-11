@@ -75,11 +75,16 @@ def main():
         if not scene['testScene']:
             b,_=renderer.render(scene,1024,64,0,seconds=4)
             assert np.abs(a.astype(int)-b.astype(int)).mean()>0.25,'Animation is static'
-            for field in ['density','turbulence','energy','hueShift','coverage','gapSoftness','gapMotion','fragmentation']:
+            for field in ['hueShift','coverage','gapSoftness','gapMotion','fragmentation']:
                 active = {'coverage':0.6} if field in ['gapSoftness','gapMotion','fragmentation'] else {}
                 lo,_=renderer.render(scene,256,64,0,overrides={**active,field:0})
                 hi,_=renderer.render(scene,256,64,0,overrides={**active,field:0.5 if field=='hueShift' else 1})
                 assert np.any(lo!=hi),(scene['id'],field,'has no effect')
+            for control in scene['parameters']:
+                lo,_=renderer.render(scene,1024,96,0,seconds=18,overrides={control['id']:control['minimum']})
+                hi,_=renderer.render(scene,1024,96,0,seconds=18,overrides={control['id']:control['maximum']})
+                difference=float(np.abs(lo.astype(float)-hi.astype(float)).mean())
+                assert difference>0.05,(scene['id'],control['id'],'no meaningful rendered effect',difference)
             off,_=renderer.render(scene,1024,64,0,overrides={'coverage':0})
             assert not off[:,:,:3].any(),'Coverage zero must remove all light'
             open_arc,_=renderer.render(scene,2048,64,0,seconds=0,overrides={'coverage':0.60,'fragmentation':0})

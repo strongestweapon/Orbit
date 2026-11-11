@@ -1,6 +1,6 @@
 /*{
   "ISFVSN": "2.0",
-  "VSN": "1.3.0",
+  "VSN": "1.4.0",
   "DESCRIPTION": "나타나고 사라지는 빛 조각 / Spectral Fragments",
   "CREDIT": "SUPERLESS / Orbit project; procedural study based on supplied reference video",
   "CATEGORIES": [
@@ -45,30 +45,6 @@
       "DEFAULT": 0,
       "MIN": 0,
       "MAX": 86400
-    },
-    {
-      "NAME": "density",
-      "LABEL": "density",
-      "TYPE": "float",
-      "DEFAULT": 0.55,
-      "MIN": 0,
-      "MAX": 1
-    },
-    {
-      "NAME": "turbulence",
-      "LABEL": "turbulence",
-      "TYPE": "float",
-      "DEFAULT": 0.45,
-      "MIN": 0,
-      "MAX": 1
-    },
-    {
-      "NAME": "energy",
-      "LABEL": "energy",
-      "TYPE": "float",
-      "DEFAULT": 0.6,
-      "MIN": 0,
-      "MAX": 1
     },
     {
       "NAME": "hueShift",
@@ -153,6 +129,54 @@
       "DEFAULT": 0.0,
       "MIN": 0,
       "MAX": 1
+    },
+    {
+      "NAME": "barLength",
+      "LABEL": "바 길이",
+      "TYPE": "float",
+      "DEFAULT": 1,
+      "MIN": 0.1,
+      "MAX": 1.4
+    },
+    {
+      "NAME": "barWidth",
+      "LABEL": "바 두께",
+      "TYPE": "float",
+      "DEFAULT": 1,
+      "MIN": 0.25,
+      "MAX": 4
+    },
+    {
+      "NAME": "fragmentDensity",
+      "LABEL": "바 밀도",
+      "TYPE": "float",
+      "DEFAULT": 0.55,
+      "MIN": 0,
+      "MAX": 1
+    },
+    {
+      "NAME": "fragmentGlow",
+      "LABEL": "바 발광",
+      "TYPE": "float",
+      "DEFAULT": 0.6,
+      "MIN": 0,
+      "MAX": 1
+    },
+    {
+      "NAME": "lifetimeRate",
+      "LABEL": "생성·소멸 속도",
+      "TYPE": "float",
+      "DEFAULT": 1,
+      "MIN": 0.1,
+      "MAX": 3
+    },
+    {
+      "NAME": "driftVariation",
+      "LABEL": "흐름 변동",
+      "TYPE": "float",
+      "DEFAULT": 0.45,
+      "MIN": 0,
+      "MAX": 1
     }
   ]
 }*/
@@ -181,6 +205,11 @@ struct OrbitParams {
     float gapSoftness;
     float gapMotion;
     float fragmentation;
+    // Scene-specific shape controls; see config/scenes.json.
+    float shape0;
+    float shape1;
+    float shape2;
+    float shape3;
 };
 
 float orbitHash(vec3 p) {
@@ -320,37 +349,37 @@ vec3 orbitShade(vec2 uv, OrbitParams p) {
         float h = orbitHash(vec3(cell,l+7.0,p.seed));
         float h2 = orbitHash(vec3(cell,l+19.0,p.seed));
         float birthPhase = orbitHash(vec3(cell,l+41.7,p.seed+12.0));
-        float phase = t*(0.65+h*0.35) + birthPhase*ORBIT_TAU;
+        float phase = t*p.shape2*(0.65+h*0.35) + birthPhase*ORBIT_TAU;
         float life = smoothstep(-0.45+0.32*p.fragmentation,0.35,
                                sin(phase)+0.15*p.turbulence*sin(t*0.87+h*6.0));
         life *= smoothstep(0.72-p.density*0.65,0.83-p.density*0.65,h2);
         float centre = 0.18+0.64*h2;
         float distance = abs(fract(q)-centre);
         float pixelWidth = count/max(angularPixels,1.0);
-        float line = spectralStroke(distance,0.013+0.027*h*h,pixelWidth);
+        float line = spectralStroke(distance,(0.013+0.027*h*h)*p.shape1,pixelWidth);
         float start = 0.025+h*0.30;
-        float end = 0.62+h2*0.36;
+        float end = min(0.985,start+(0.62+h2*0.36-start)*p.shape0);
         float body = smoothstep(start-dv,start+dv,v)*(1.0-smoothstep(end-dv,end+dv,v));
         float breakCentre = 0.22+h2*0.50;
         float breakWidth = 0.025+0.11*h;
         float interruption = smoothstep(breakWidth-dv,breakWidth+dv,abs(v-breakCentre));
         float cap = max(spectralStroke(v-start,0.007,dv),spectralStroke(v-end,0.007,dv));
-        cap *= spectralStroke(distance,0.12+0.12*h2,pixelWidth);
+        cap *= spectralStroke(distance,(0.12+0.12*h2)*p.shape1,pixelWidth);
         // Some broad pale chips make the uneven white segments in the reference.
-        float plate = spectralStroke(distance,0.10+0.11*h,pixelWidth)*body;
+        float plate = spectralStroke(distance,(0.10+0.11*h)*p.shape1,pixelWidth)*body;
         float plateLife = smoothstep(0.25,0.75,h)*life;
         vec3 pale = mix(vec3(0.27,0.39,0.45),vec3(0.91,0.93,0.88),h);
         pale = mix(pale,film,warm*0.25);
         float onDark = 1.0-0.88*smoothstep(0.18,0.70,warm);
         float fine = (line*body*interruption*6.0+cap*1.3)*life;
         float chips = plate*plateLife*(2.1+0.4*pearl);
-        colour += pale*(fine+chips)*onDark*(0.38+0.62*occupancy)/(1.0+l*0.75);
+        colour += pale*(fine+chips)*((0.65+0.55*p.energy)/0.98)*onDark*(0.38+0.62*occupancy)/(1.0+l*0.75);
     }
     // Broken, faint edge fragments retain the flat strip's profile.
     float edgeOccupancy = smoothstep(0.43,0.68,orbitNoise(orbitCircle(u,0.0,51.0,t*0.09,p.seed+31.0)))*occupancy;
     float edges = spectralStroke(v-0.07,0.006,dv)+spectralStroke(v-0.92,0.006,dv);
     colour += vec3(0.56,0.66,0.68)*edges*edgeOccupancy*(1.0-warm)*0.16;
-    return colour*(0.65+0.55*p.energy)*orbitBandEdge(v);
+    return colour*0.98*orbitBandEdge(v);
 }
 
 void main() {
@@ -359,9 +388,9 @@ void main() {
     p.outputHeight = RENDERSIZE.y;
     p.viewMode = float(viewMode);
     p.phaseTime = externalClock ? clockSeconds : TIME * speed;
-    p.density = density;
-    p.turbulence = turbulence;
-    p.energy = energy;
+    p.density = fragmentDensity;
+    p.turbulence = driftVariation;
+    p.energy = fragmentGlow;
     p.hueShift = hueShift;
     p.brightness = brightness;
     p.seed = seed;
@@ -375,6 +404,10 @@ void main() {
     p.gapSoftness = gapSoftness;
     p.gapMotion = gapMotion;
     p.fragmentation = fragmentation;
+    p.shape0 = barLength;
+    p.shape1 = barWidth;
+    p.shape2 = lifetimeRate;
+    p.shape3 = 1.0;
     vec2 pixel = vec2(isf_FragNormCoord.x, 1.0-isf_FragNormCoord.y) * RENDERSIZE;
     vec3 uv = orbitCoordinates(pixel, p);
     float presence = orbitPresence(uv.xy, p);

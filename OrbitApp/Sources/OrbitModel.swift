@@ -13,6 +13,7 @@ struct SceneDescriptor: Decodable, Identifiable {
     let referenceSeconds: [Double]?
     let referenceImage: String?
     let texture: TextureDescriptor?
+    let parameters: [ShaderParameter]
 }
 struct SceneManifest: Decodable { let scenes: [SceneDescriptor] }
 
@@ -95,6 +96,14 @@ final class OrbitModel: ObservableObject {
     var activeRoutes: [String:ParameterRoute] {
         (usesTexture ? activeSettings.textureParameterRoutes : activeSettings.parameterRoutes) ?? [:]
     }
+    var shaderParameters: [ShaderParameter] { usesTexture ? [] : (selectedScene?.parameters ?? []) }
+    var parameterSpecs: [ParameterSpec] {
+        if usesTexture || selectedScene?.testScene == true { return ParameterSpec.all }
+        let common = ParameterSpec.all.filter { !["density","turbulence","energy","rotation"].contains($0.id) }
+        return common + shaderParameters.enumerated().map { $0.element.spec(index:$0.offset) }
+    }
+    func parameterSpec(_ key: String) -> ParameterSpec { parameterSpecs.first { $0.id == key } ?? .find(key) }
+    var quickParameter: ParameterSpec { parameterSpec(shaderParameters.first { $0.quick }?.id ?? "energy") }
     var manualPlaybackSpeed: Float { usesTexture ? (activeSettings.values["texture.speed"] ?? 1) : activeSettings.speed }
     var playbackSpeed: Float { Float(parameterValues["speed"] ?? Double(manualPlaybackSpeed)) }
     var activeControlOutputCount: Int { activeRoutes.values.filter { $0.output.enabled }.count }
@@ -134,7 +143,10 @@ final class OrbitModel: ObservableObject {
             if let data = UserDefaults.standard.data(forKey: "OrbitSettings.v1"),
                let stored = try? JSONDecoder().decode(StoredSettings.self, from: data) {
                 sensors = stored.sensors.map { var s = $0; s.receivedAt = nil; return s }
-                for (key, value) in stored.scenes where settings[key] != nil {
+                for (key, storedValue) in stored.scenes where settings[key] != nil {
+                    var value = storedValue
+                    value.migrateRoutes(scene:key)
+                    value.migrateShaderParameters(scenes.first { $0.id == key }?.parameters ?? [])
                     settings[key]?.values.merge(value.values) { _, storedValue in storedValue }
                     settings[key]?.speed = value.speed
                     settings[key]?.mapping = value.mapping
@@ -254,16 +266,17 @@ final class OrbitModel: ObservableObject {
         let appearance = ["density", "turbulence", "energy", "hueShift", "brightness", "seed",
                           "coverage", "gapSoftness", "gapMotion", "fragmentation"]
         for name in appearance { updated.values[name] = scene.defaults[name] }
+        for parameter in scene.parameters { updated.values[parameter.id] = Float(parameter.defaultValue) }
         updated.speed = scene.defaultClockSpeed
         settings[selectedSceneID] = updated
         restartPlayback(); resetParameterState()
     }
     func route(for key: String) -> ParameterRoute {
-        activeRoutes[key] ?? ParameterRoute.defaults(scene:selectedSceneID,parameter:key)
+        activeRoutes[key] ?? ParameterRoute.defaults(scene:selectedSceneID,parameter:key,spec:parameterSpec(key))
     }
     func setRoute(_ key: String, _ update: (inout ParameterRoute) -> Void) {
         var route = route(for:key); let prior = route; update(&route)
-        let spec = ParameterSpec.find(key)
+        let spec = parameterSpec(key)
         route.input.minimum = spec.clamp(route.input.minimum)
         route.input.maximum = spec.clamp(route.input.maximum)
         route.input.smoothingSeconds = route.input.smoothingSeconds.isFinite ? min(30,max(0,route.input.smoothingSeconds)) : 8
@@ -278,12 +291,12 @@ final class OrbitModel: ObservableObject {
         let route = route(for:key).output
         if let issue = route.validationError { return issue }
         if let other = activeRoutes.first(where: { $0.key != key && $0.value.output.enabled && $0.value.output.destinationKey == route.destinationKey }) {
-            return "\(ParameterSpec.find(other.key).title)와 출력 주소가 겹칩니다. 채널·CC 또는 OSC 주소를 바꾸세요."
+            return "\(parameterSpec(other.key).title)와 출력 주소가 겹칩니다. 채널·CC 또는 OSC 주소를 바꾸세요."
         }
         return nil
     }
     func testControlOutput(_ key: String) {
-        guard let spec = ParameterSpec.all.first(where: { $0.id == key }), outputIssue(for:key) == nil else { return }
+        guard let spec = parameterSpecs.first(where: { $0.id == key }), outputIssue(for:key) == nil else { return }
         // Isolate this parameter during Live's MIDI learn, even if other routes were transmitting.
         controlOutputEnabled = false
         let route = route(for:key).output
@@ -298,11 +311,11 @@ final class OrbitModel: ObservableObject {
     private func refreshParameters(delta: Double) {
         var base = effectiveValues.mapValues(Double.init); base["speed"] = Double(manualPlaybackSpeed)
         let routes = selectedScene?.testScene == false ? activeRoutes : [:]
-        var resolved = parameterResolver.resolve(base:base,routes:routes,sensors:sensors,now:Date(),delta:delta)
+        var resolved = parameterResolver.resolve(base:base,routes:routes,sensors:sensors,now:Date(),delta:delta,specs:parameterSpecs)
         if usesTexture { resolved["markerWidth"] = (resolved["rotation"] ?? 0)*0.1 }
         if parameterValues != resolved { parameterValues = resolved }
         guard controlOutputEnabled else { return }
-        let emissions = ParameterSpec.all.compactMap { spec -> ControlEmission? in
+        let emissions = parameterSpecs.compactMap { spec -> ControlEmission? in
             guard let route = routes[spec.id]?.output, route.enabled, outputIssue(for:spec.id) == nil,
                   let value = route.mappedValue(resolved[spec.id] ?? baseParameterValue(spec.id),spec:spec) else { return nil }
             return ControlEmission(id:"\(selectedSceneID):\(renderStyle):\(spec.id)",route:route,value:value)
@@ -336,7 +349,8 @@ final class OrbitModel: ObservableObject {
     func uniforms(width: Float, height: Float, view: Float) -> [Float] {
         // A shared monotonic clock for every preview and output. Rendering delays must not slow time.
         let now = CACurrentMediaTime(); let delta = max(0, now - lastTime); lastTime = now
-        let values = parameterValues.mapValues(Float.init)
+        var values = parameterValues.mapValues(Float.init)
+        for parameter in shaderParameters { values[parameter.uniform] = values[parameter.id] ?? Float(parameter.defaultValue) }
         let speed = playbackSpeed
         if playing { phaseTime += delta * Double(speed) }
         if usesTexture, let scene = selectedScene, let original = scene.texture {
@@ -353,8 +367,8 @@ final class OrbitModel: ObservableObject {
             comparison.sync(scene: scene, seconds: phaseTime.truncatingRemainder(dividingBy:duration), playing: playing, speed: speed)
         }
         let names = ["density","turbulence","energy","hueShift","brightness","seed","angleOffset","flipU","flipV","ringWidth","testPattern","markerWidth",
-                     "coverage","gapSoftness","gapMotion","fragmentation"]
-        // Pure code generation and optional reference playback share the 80-byte ABI.
+                     "coverage","gapSoftness","gapMotion","fragmentation","shape0","shape1","shape2","shape3"]
+        // Stable 96-byte GPU layout; semantic parameter IDs are packed into their declared slots.
         return [width,height,view,Float(phaseTime)] + names.map { values[$0] ?? 0 }
     }
     func framePresented(output: Bool, outputSession: UUID? = nil) {

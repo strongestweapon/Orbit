@@ -1,6 +1,6 @@
 /*{
   "ISFVSN": "2.0",
-  "VSN": "1.3.0",
+  "VSN": "1.4.0",
   "DESCRIPTION": "어두운 유체 링 / Chroma Flow",
   "CREDIT": "SUPERLESS / Orbit project; procedural study based on supplied reference video",
   "CATEGORIES": [
@@ -45,30 +45,6 @@
       "DEFAULT": 0,
       "MIN": 0,
       "MAX": 86400
-    },
-    {
-      "NAME": "density",
-      "LABEL": "density",
-      "TYPE": "float",
-      "DEFAULT": 0.48,
-      "MIN": 0,
-      "MAX": 1
-    },
-    {
-      "NAME": "turbulence",
-      "LABEL": "turbulence",
-      "TYPE": "float",
-      "DEFAULT": 0.68,
-      "MIN": 0,
-      "MAX": 1
-    },
-    {
-      "NAME": "energy",
-      "LABEL": "energy",
-      "TYPE": "float",
-      "DEFAULT": 0.52,
-      "MIN": 0,
-      "MAX": 1
     },
     {
       "NAME": "hueShift",
@@ -153,6 +129,54 @@
       "DEFAULT": 0.0,
       "MIN": 0,
       "MAX": 1
+    },
+    {
+      "NAME": "foldDensity",
+      "LABEL": "주름 밀도",
+      "TYPE": "float",
+      "DEFAULT": 0.48,
+      "MIN": 0,
+      "MAX": 1
+    },
+    {
+      "NAME": "flowDistortion",
+      "LABEL": "유체 뒤틀림",
+      "TYPE": "float",
+      "DEFAULT": 0.68,
+      "MIN": 0,
+      "MAX": 1
+    },
+    {
+      "NAME": "ridgeWidth",
+      "LABEL": "반사선 두께",
+      "TYPE": "float",
+      "DEFAULT": 1,
+      "MIN": 0.2,
+      "MAX": 3
+    },
+    {
+      "NAME": "sheen",
+      "LABEL": "반사광 강도",
+      "TYPE": "float",
+      "DEFAULT": 0.52,
+      "MIN": 0,
+      "MAX": 1
+    },
+    {
+      "NAME": "poolContrast",
+      "LABEL": "명암 대비",
+      "TYPE": "float",
+      "DEFAULT": 1,
+      "MIN": 0,
+      "MAX": 2
+    },
+    {
+      "NAME": "surfaceDrift",
+      "LABEL": "표면 흐름",
+      "TYPE": "float",
+      "DEFAULT": 1,
+      "MIN": 0,
+      "MAX": 2
     }
   ]
 }*/
@@ -181,6 +205,11 @@ struct OrbitParams {
     float gapSoftness;
     float gapMotion;
     float fragmentation;
+    // Scene-specific shape controls; see config/scenes.json.
+    float shape0;
+    float shape1;
+    float shape2;
+    float shape3;
 };
 
 float orbitHash(vec3 p) {
@@ -277,13 +306,15 @@ vec3 orbitShade(vec2 uv, OrbitParams p) {
     // One clock second is one reference second. The former clock was ~13x slower.
     float t = p.phaseTime * 3.6;
     float a = ORBIT_TAU * uv.x;
-    vec3 q = orbitCircle(uv.x - t * 0.008, uv.y * 0.55, 1.3 + p.density * 1.7, t * 0.42, p.seed);
+    vec3 q = orbitCircle(uv.x - t * 0.008 * p.shape2, uv.y * 0.55, 1.3 + p.density * 1.7, t * 0.42 * p.shape2, p.seed);
     vec3 warp = vec3(orbitFbm(q), orbitFbm(q + 9.1), orbitFbm(q + 17.7));
     float field = orbitFbm(q + warp * (1.8 + p.turbulence * 3.2));
     float fold = sin(a * 3.0 - t * 0.15 + uv.y * 1.4 + field * 4.0 - t * 0.3);
-    float caustic = exp(-abs(fold) * 24.0);
+    float caustic = exp(-abs(fold) * 24.0 / max(p.shape0,0.05));
     float satin = pow(0.5 + 0.5 * fold, 4.0);
     float pool = smoothstep(0.28, 0.78, orbitFbm(q * 0.64 + 5.2));
+    pool = clamp((pool-0.5)*p.shape1+0.5,0.0,1.0);
+    float sheen = (0.66+p.energy*0.96)/1.1592;
     // Palette evolution is slower than the folding surface, as in the source.
     float paletteTime = p.phaseTime - floor(p.phaseTime / 23.0) * 23.0;
     float green = smoothstep(9.0,11.0,paletteTime) * (1.0-smoothstep(12.0,14.0,paletteTime));
@@ -293,13 +324,13 @@ vec3 orbitShade(vec2 uv, OrbitParams p) {
     vec3 pearl = mix(orbitHsv(0.065+p.hueShift,0.27,1.0),orbitHsv(0.24+p.hueShift,0.24,1.0),green);
     pearl = mix(pearl,orbitHsv(0.84+p.hueShift,0.24,1.0),violet);
     vec3 col = bronze * (0.08 + 0.85 * pool) * (0.35 + 0.65 * satin);
-    col += pearl * (caustic * 0.74 + satin * 0.34) * (0.14 + 0.86 * pool);
+    col += pearl * sheen * (caustic * 0.74 + satin * 0.34) * (0.14 + 0.86 * pool);
     float reflection = pow(0.5 + 0.5 * cos(a + 0.65 + (field - 0.5) * 1.4), 4.0);
-    col += pearl * reflection * (0.35 + satin * 0.7);
+    col += pearl * sheen * reflection * (0.35 + satin * 0.7);
     col += pearl * pow(orbitFbm(q * 4.2), 4.0) * 0.15;
     float rim = exp(-uv.y * 65.0) + exp(-(1.0 - uv.y) * 65.0);
     col += pearl * rim * (0.08 + pool * 0.20);
-    return col * (0.66 + p.energy * 0.96) * orbitBandEdge(uv.y);
+    return col * 1.1592 * orbitBandEdge(uv.y);
 }
 
 void main() {
@@ -308,9 +339,9 @@ void main() {
     p.outputHeight = RENDERSIZE.y;
     p.viewMode = float(viewMode);
     p.phaseTime = externalClock ? clockSeconds : TIME * speed;
-    p.density = density;
-    p.turbulence = turbulence;
-    p.energy = energy;
+    p.density = foldDensity;
+    p.turbulence = flowDistortion;
+    p.energy = sheen;
     p.hueShift = hueShift;
     p.brightness = brightness;
     p.seed = seed;
@@ -324,6 +355,10 @@ void main() {
     p.gapSoftness = gapSoftness;
     p.gapMotion = gapMotion;
     p.fragmentation = fragmentation;
+    p.shape0 = ridgeWidth;
+    p.shape1 = poolContrast;
+    p.shape2 = surfaceDrift;
+    p.shape3 = 1.0;
     vec2 pixel = vec2(isf_FragNormCoord.x, 1.0-isf_FragNormCoord.y) * RENDERSIZE;
     vec3 uv = orbitCoordinates(pixel, p);
     float presence = orbitPresence(uv.xy, p);

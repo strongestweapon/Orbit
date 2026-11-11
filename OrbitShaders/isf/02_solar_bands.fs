@@ -1,6 +1,6 @@
 /*{
   "ISFVSN": "2.0",
-  "VSN": "1.3.0",
+  "VSN": "1.4.0",
   "DESCRIPTION": "주황·연두 방사형 밴드 / Solar Bands",
   "CREDIT": "SUPERLESS / Orbit project; procedural study based on supplied reference video",
   "CATEGORIES": [
@@ -45,30 +45,6 @@
       "DEFAULT": 0,
       "MIN": 0,
       "MAX": 86400
-    },
-    {
-      "NAME": "density",
-      "LABEL": "density",
-      "TYPE": "float",
-      "DEFAULT": 0.62,
-      "MIN": 0,
-      "MAX": 1
-    },
-    {
-      "NAME": "turbulence",
-      "LABEL": "turbulence",
-      "TYPE": "float",
-      "DEFAULT": 0.32,
-      "MIN": 0,
-      "MAX": 1
-    },
-    {
-      "NAME": "energy",
-      "LABEL": "energy",
-      "TYPE": "float",
-      "DEFAULT": 0.62,
-      "MIN": 0,
-      "MAX": 1
     },
     {
       "NAME": "hueShift",
@@ -153,6 +129,54 @@
       "DEFAULT": 0.0,
       "MIN": 0,
       "MAX": 1
+    },
+    {
+      "NAME": "bandLength",
+      "LABEL": "밴드 길이",
+      "TYPE": "float",
+      "DEFAULT": 1,
+      "MIN": 0.1,
+      "MAX": 1
+    },
+    {
+      "NAME": "bandDensity",
+      "LABEL": "밴드 밀도",
+      "TYPE": "float",
+      "DEFAULT": 0.62,
+      "MIN": 0,
+      "MAX": 1
+    },
+    {
+      "NAME": "bandBend",
+      "LABEL": "밴드 휘어짐",
+      "TYPE": "float",
+      "DEFAULT": 0.32,
+      "MIN": 0,
+      "MAX": 1
+    },
+    {
+      "NAME": "bandGlow",
+      "LABEL": "밴드 발광",
+      "TYPE": "float",
+      "DEFAULT": 0.62,
+      "MIN": 0,
+      "MAX": 1
+    },
+    {
+      "NAME": "bandSharpness",
+      "LABEL": "밴드 명암",
+      "TYPE": "float",
+      "DEFAULT": 1,
+      "MIN": 0.25,
+      "MAX": 3
+    },
+    {
+      "NAME": "colorSpread",
+      "LABEL": "색 띠 간격",
+      "TYPE": "float",
+      "DEFAULT": 1,
+      "MIN": 0,
+      "MAX": 2
     }
   ]
 }*/
@@ -181,6 +205,11 @@ struct OrbitParams {
     float gapSoftness;
     float gapMotion;
     float fragmentation;
+    // Scene-specific shape controls; see config/scenes.json.
+    float shape0;
+    float shape1;
+    float shape2;
+    float shape3;
 };
 
 float orbitHash(vec3 p) {
@@ -281,13 +310,14 @@ vec3 orbitShade(vec2 uv, OrbitParams p) {
     float bend = (orbitNoise(orbitCircle(u, uv.y * 0.4, 6.0, t * 0.14, p.seed)) - 0.5) * p.turbulence * 0.004;
     vec3 q = orbitCircle(u + bend, uv.y * 0.035, 18.0 + p.density * 27.0, t * 0.38, p.seed);
     float shafts = 0.84 * orbitNoise(q) + 0.16 * orbitNoise(q * 2.07 + 11.4);
-    float light = smoothstep(0.17, 0.78, shafts);
+    float light = pow(smoothstep(0.17, 0.78, shafts),p.shape1);
     float variation = orbitNoise(orbitCircle(u, 0.0, 4.0, t * 0.14, p.seed + 8.0));
-    float hue = 0.034 + uv.y * 0.13 + 0.045 * sin(angle - p.phaseTime * 1.03)
+    float hue = 0.034 + uv.y * 0.13 * p.shape2 + 0.045 * sin(angle - p.phaseTime * 1.03)
               + (variation - 0.5) * 0.055 + p.hueShift;
     vec3 col = orbitHsv(hue, 0.78 + 0.16 * (1.0 - light), 0.38 + 0.65 * pow(light, 0.55));
     col += vec3(0.16, 0.13, 0.025) * pow(light, 5.0);
-    return col * (0.66 + p.energy * 0.55) * orbitBandEdge(uv.y);
+    float lengthMask = 1.0-smoothstep(p.shape0-0.015,p.shape0+0.015,uv.y);
+    return col * lengthMask * (0.66 + p.energy * 0.55) * orbitBandEdge(uv.y);
 }
 
 void main() {
@@ -296,9 +326,9 @@ void main() {
     p.outputHeight = RENDERSIZE.y;
     p.viewMode = float(viewMode);
     p.phaseTime = externalClock ? clockSeconds : TIME * speed;
-    p.density = density;
-    p.turbulence = turbulence;
-    p.energy = energy;
+    p.density = bandDensity;
+    p.turbulence = bandBend;
+    p.energy = bandGlow;
     p.hueShift = hueShift;
     p.brightness = brightness;
     p.seed = seed;
@@ -312,6 +342,10 @@ void main() {
     p.gapSoftness = gapSoftness;
     p.gapMotion = gapMotion;
     p.fragmentation = fragmentation;
+    p.shape0 = bandLength;
+    p.shape1 = bandSharpness;
+    p.shape2 = colorSpread;
+    p.shape3 = 1.0;
     vec2 pixel = vec2(isf_FragNormCoord.x, 1.0-isf_FragNormCoord.y) * RENDERSIZE;
     vec3 uv = orbitCoordinates(pixel, p);
     float presence = orbitPresence(uv.xy, p);

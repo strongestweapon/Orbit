@@ -1,6 +1,6 @@
 /*{
   "ISFVSN": "2.0",
-  "VSN": "1.3.0",
+  "VSN": "1.4.0",
   "DESCRIPTION": "청보라 리본과 밝은 테두리 / Aurora Ribbon",
   "CREDIT": "SUPERLESS / Orbit project; procedural study based on supplied reference video",
   "CATEGORIES": [
@@ -45,30 +45,6 @@
       "DEFAULT": 0,
       "MIN": 0,
       "MAX": 86400
-    },
-    {
-      "NAME": "density",
-      "LABEL": "density",
-      "TYPE": "float",
-      "DEFAULT": 0.4,
-      "MIN": 0,
-      "MAX": 1
-    },
-    {
-      "NAME": "turbulence",
-      "LABEL": "turbulence",
-      "TYPE": "float",
-      "DEFAULT": 0.4,
-      "MIN": 0,
-      "MAX": 1
-    },
-    {
-      "NAME": "energy",
-      "LABEL": "energy",
-      "TYPE": "float",
-      "DEFAULT": 0.62,
-      "MIN": 0,
-      "MAX": 1
     },
     {
       "NAME": "hueShift",
@@ -153,6 +129,54 @@
       "DEFAULT": 0.0,
       "MIN": 0,
       "MAX": 1
+    },
+    {
+      "NAME": "ribbonWidth",
+      "LABEL": "리본 폭",
+      "TYPE": "float",
+      "DEFAULT": 1,
+      "MIN": 0.15,
+      "MAX": 1
+    },
+    {
+      "NAME": "dustDensity",
+      "LABEL": "미세 입자 밀도",
+      "TYPE": "float",
+      "DEFAULT": 0.4,
+      "MIN": 0,
+      "MAX": 1
+    },
+    {
+      "NAME": "cloudScale",
+      "LABEL": "구름결 밀도",
+      "TYPE": "float",
+      "DEFAULT": 0.4,
+      "MIN": 0,
+      "MAX": 1
+    },
+    {
+      "NAME": "edgeGlow",
+      "LABEL": "테두리 발광",
+      "TYPE": "float",
+      "DEFAULT": 0.62,
+      "MIN": 0,
+      "MAX": 1
+    },
+    {
+      "NAME": "sparkleStrength",
+      "LABEL": "입자 반짝임",
+      "TYPE": "float",
+      "DEFAULT": 1,
+      "MIN": 0,
+      "MAX": 2
+    },
+    {
+      "NAME": "warmLobes",
+      "LABEL": "양옆의 금빛",
+      "TYPE": "float",
+      "DEFAULT": 1,
+      "MIN": 0,
+      "MAX": 1
     }
   ]
 }*/
@@ -181,6 +205,11 @@ struct OrbitParams {
     float gapSoftness;
     float gapMotion;
     float fragmentation;
+    // Scene-specific shape controls; see config/scenes.json.
+    float shape0;
+    float shape1;
+    float shape2;
+    float shape3;
 };
 
 float orbitHash(vec3 p) {
@@ -290,6 +319,8 @@ float auroraParticles(vec2 position, float time) {
     return light;
 }
 vec3 orbitShade(vec2 uv, OrbitParams p) {
+    uv.y /= max(p.shape0,0.05);
+    if (uv.y >= 1.0) return vec3(0.0);
     float t = p.phaseTime * 1.1;
     float a = ORBIT_TAU * uv.x;
     float drift = t * 0.035;
@@ -297,7 +328,7 @@ vec3 orbitShade(vec2 uv, OrbitParams p) {
     vec3 q = vec3(radial * (6.0 + uv.y * 0.8), t * 0.25 + p.seed);
     float cloud = orbitFbm(q * (1.2 + p.turbulence));
     // The amber side lobes stay in place; the surface flows through them.
-    float warm = pow(abs(sin(a + 0.12)), 7.0);
+    float warm = pow(abs(sin(a + 0.12)), 7.0) * p.shape2;
     float south = 0.5 - 0.5 * cos(a);
     vec3 blue = orbitHsv(0.64 - south * 0.105 + p.hueShift, 0.73, 0.55);
     vec3 gold = orbitHsv(0.055 + p.hueShift, 0.47, 0.92);
@@ -307,16 +338,17 @@ vec3 orbitShade(vec2 uv, OrbitParams p) {
     float dust = auroraParticles(dustUV, t);
     float grain = pow(orbitNoise(vec3(dustUV * 2.9, t * 0.35)), 5.0);
     vec3 ice = mix(vec3(0.45,0.72,1.0), vec3(1.0,0.87,0.64), warm);
-    col += ice * (dust * 0.55 + grain * 0.60) * (0.4 + cloud);
+    col += ice * (dust * 0.55 + grain * 0.60) * p.shape1 * (0.4 + cloud);
     float flow = 0.5 + 0.5 * sin(a * 2.0 - p.phaseTime * 1.1 + (cloud - 0.5) * 2.0);
     col *= 0.60 + flow * 0.60;
     float shimmer = 0.93 + 0.07 * sin(t * 0.52);
     float inner = exp(-uv.y * 22.0) * 1.65 + exp(-uv.y * 6.0) * 0.31;
     float outer = exp(-(1.0 - uv.y) * 28.0);
-    col += vec3(0.85,0.9,1.0) * inner * shimmer;
-    col += mix(vec3(0.12,0.9,1.0), ice, warm) * outer * 1.05;
+    float edgeGlow = (0.62+p.energy*0.64)/1.0168;
+    col += edgeGlow * vec3(0.85,0.9,1.0) * inner * shimmer;
+    col += edgeGlow * mix(vec3(0.12,0.9,1.0), ice, warm) * outer * 1.05;
     col += ice * warm * 0.20;
-    return col * (0.62 + p.energy * 0.64) * orbitBandEdge(uv.y);
+    return col * 1.0168 * orbitBandEdge(uv.y);
 }
 
 void main() {
@@ -325,9 +357,9 @@ void main() {
     p.outputHeight = RENDERSIZE.y;
     p.viewMode = float(viewMode);
     p.phaseTime = externalClock ? clockSeconds : TIME * speed;
-    p.density = density;
-    p.turbulence = turbulence;
-    p.energy = energy;
+    p.density = dustDensity;
+    p.turbulence = cloudScale;
+    p.energy = edgeGlow;
     p.hueShift = hueShift;
     p.brightness = brightness;
     p.seed = seed;
@@ -341,6 +373,10 @@ void main() {
     p.gapSoftness = gapSoftness;
     p.gapMotion = gapMotion;
     p.fragmentation = fragmentation;
+    p.shape0 = ribbonWidth;
+    p.shape1 = sparkleStrength;
+    p.shape2 = warmLobes;
+    p.shape3 = 1.0;
     vec2 pixel = vec2(isf_FragNormCoord.x, 1.0-isf_FragNormCoord.y) * RENDERSIZE;
     vec3 uv = orbitCoordinates(pixel, p);
     float presence = orbitPresence(uv.xy, p);

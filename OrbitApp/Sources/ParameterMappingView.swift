@@ -13,7 +13,7 @@ struct MappedParameterSlider: View {
     var body: some View {
         VStack(spacing:4) {
             HStack(spacing:5) {
-                Text(title).foregroundStyle(.secondary).lineLimit(1)
+                Text(title).foregroundStyle(.secondary).lineLimit(1).help(model.parameterSpec(key).detail)
                 ParameterRouteButton(model:model,key:key,title:title)
                 Spacer(minLength:0)
                 Text(String(format:"%.2f",value.wrappedValue)+suffix).monospacedDigit().lineLimit(1)
@@ -56,7 +56,7 @@ private struct ParameterRoutingPopover: View {
     let close: () -> Void
     @State private var tab = 0
     private var route: ParameterRoute { model.route(for:key) }
-    private var spec: ParameterSpec { ParameterSpec.find(key) }
+    private var spec: ParameterSpec { model.parameterSpec(key) }
     private var currentValue: Double { model.parameterValues[key] ?? model.baseParameterValue(key) }
     private var sensor: SensorInput? { model.sensors.first { $0.id == route.input.sensorID } }
     private func input<T>(_ path: WritableKeyPath<ParameterInputRoute,T>) -> Binding<T> {
@@ -76,6 +76,9 @@ private struct ParameterRoutingPopover: View {
                 Spacer()
                 Text(String(format:"%.3f",currentValue)).font(.system(size:18,design:.monospaced))
             }
+            if !spec.detail.isEmpty {
+                Text(spec.detail).font(.system(size:11)).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
+            }
             Picker("매핑 방향",selection:$tab) {Text("입력 · 센서 → 영상").tag(0);Text("출력 · 영상 → Live").tag(1)}
                 .pickerStyle(.segmented).accessibilityIdentifier("routeTab")
             if tab == 0 { inputPanel } else { outputPanel }
@@ -85,7 +88,7 @@ private struct ParameterRoutingPopover: View {
                 Text("이 파라미터에만 적용 · 자동 저장").font(.system(size:10)).foregroundStyle(.secondary)
                 Spacer(); Button("닫기",action:close).keyboardShortcut(.cancelAction)
             }
-        }.padding(18).frame(width:460,height:540).background(Color(white:0.07)).font(.system(size:12))
+        }.padding(18).frame(width:460,height:580).background(Color(white:0.07)).font(.system(size:12))
             .textFieldStyle(.roundedBorder).preferredColorScheme(.dark)
     }
     private var inputPanel: some View {

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "status": "example bindings; application must implement OSC receiving and smoothing",
+  "status": "example bindings; native app supports per-parameter OSC input and MIDI/OSC output",
   "osc": {
     "bindAddress": "0.0.0.0",
     "udpPort": 9000,
@@ -44,7 +44,7 @@
       },
       {
         "sensor": "visitors",
-        "target": "uniform.density",
+        "target": "parameter.foldDensity",
         "outputRange": [
           0.2,
           0.85
@@ -55,7 +55,7 @@
       },
       {
         "sensor": "racing_speed",
-        "target": "uniform.energy",
+        "target": "parameter.sheen",
         "outputRange": [
           0.35,
           0.85
@@ -79,7 +79,7 @@
       },
       {
         "sensor": "visitors",
-        "target": "uniform.density",
+        "target": "parameter.bandDensity",
         "outputRange": [
           0.2,
           0.85
@@ -90,7 +90,7 @@
       },
       {
         "sensor": "racing_speed",
-        "target": "uniform.energy",
+        "target": "parameter.bandGlow",
         "outputRange": [
           0.35,
           0.85
@@ -114,7 +114,7 @@
       },
       {
         "sensor": "visitors",
-        "target": "uniform.density",
+        "target": "parameter.dustDensity",
         "outputRange": [
           0.2,
           0.85
@@ -125,7 +125,7 @@
       },
       {
         "sensor": "racing_speed",
-        "target": "uniform.energy",
+        "target": "parameter.edgeGlow",
         "outputRange": [
           0.35,
           0.85
@@ -149,7 +149,7 @@
       },
       {
         "sensor": "visitors",
-        "target": "uniform.density",
+        "target": "parameter.filamentDensity",
         "outputRange": [
           0.2,
           0.85
@@ -160,7 +160,7 @@
       },
       {
         "sensor": "racing_speed",
-        "target": "uniform.energy",
+        "target": "parameter.dischargeIntensity",
         "outputRange": [
           0.35,
           0.85
@@ -184,7 +184,7 @@
       },
       {
         "sensor": "visitors",
-        "target": "uniform.density",
+        "target": "parameter.foldScale",
         "outputRange": [
           0.2,
           0.85
@@ -195,7 +195,7 @@
       },
       {
         "sensor": "racing_speed",
-        "target": "uniform.energy",
+        "target": "parameter.haloGlow",
         "outputRange": [
           0.35,
           0.85
@@ -220,7 +220,7 @@
       },
       {
         "sensor": "visitors",
-        "target": "uniform.density",
+        "target": "parameter.fragmentDensity",
         "outputRange": [
           0.2,
           0.85
@@ -231,7 +231,7 @@
       },
       {
         "sensor": "racing_speed",
-        "target": "uniform.energy",
+        "target": "parameter.fragmentGlow",
         "outputRange": [
           0.35,
           0.85
@@ -255,7 +255,7 @@
       },
       {
         "sensor": "visitors",
-        "target": "uniform.density",
+        "target": "parameter.particleDensity",
         "outputRange": [
           0.2,
           0.85
@@ -266,7 +266,7 @@
       },
       {
         "sensor": "racing_speed",
-        "target": "uniform.energy",
+        "target": "parameter.headGlow",
         "outputRange": [
           0.35,
           0.85

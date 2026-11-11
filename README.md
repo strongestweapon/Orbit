@@ -42,6 +42,24 @@ Metal 소스는 앱에서 런타임에 컴파일합니다. 별도 Metal Toolchai
 
 `python3 OrbitApp/Tools/package_icon.py`로 원본의 투명도를 유지하면서 16–1024 px 아이콘을 `OrbitApp/Resources/OrbitAppIcon.icns`로 패키징하고 헤더용 `OrbitLogo.png`를 만듭니다. Finder·Dock·앱 정보 창은 같은 아이콘을 사용합니다.
 
+## 씬별 조절 항목 (0.3.0)
+
+씬을 선택하면 메인 화면의 세 번째 조절값이 해당 씬의 대표 파라미터로 바뀝니다. **씬 연출 → 형태 / 질감·색 / 빛·소멸**에서 스크롤 없이 나머지 항목을 조절합니다. 이름에 마우스를 올리거나 연결 창을 열면 실제 변화에 대한 설명이 표시됩니다.
+
+| 씬 | 전용 파라미터 |
+|---|---|
+| Chroma Flow | 주름 밀도, 유체 뒤틀림, 반사선 두께, 반사광 강도, 명암 대비, 표면 흐름 |
+| Solar Bands | 밴드 길이, 밴드 밀도, 밴드 휘어짐, 밴드 발광, 밴드 명암, 색 띠 간격 |
+| Aurora Ribbon | 리본 폭, 미세 입자 밀도, 구름결 밀도, 테두리 발광, 입자 반짝임, 양옆의 금빛 |
+| Electric Corona | 코로나 길이, 필라멘트 밀도·휘어짐·두께, 방전 강도, 안쪽 광륜 |
+| Cyan Halo | 밝은 구간 길이, 헤일로 폭, 표면 주름 밀도·뒤틀림, 헤일로 발광, 회전 가속 |
+| Spectral Fragments | 바 길이, 바 두께, 바 밀도, 바 발광, 생성·소멸 속도, 흐름 변동 |
+| Golden Drift | 금빛 머리 길이, 입자 밀도·크기, 머리 발광, 입자 반짝임, 물결 굴곡 |
+
+속도·밝기·색상·점등 범위·링 방향은 공통입니다. 바 길이와 두께 등 형태 항목은 실제 셰이더 수식을 제어하고, 생성·소멸 속도는 이동 속도와 독립적입니다. 각 항목의 범위와 매핑은 독립적이며, 기존 밀도·움직임·에너지 값과 입력·출력 연결은 대응하는 새 항목으로 이전합니다. 이미 사용 중인 MIDI CC나 OSC 출력 주소도 유지합니다. 원본 재생은 별도의 재생·질감 조절과 매핑을 유지합니다.
+
+씬별 정의의 원본은 `OrbitShaders/tools/scene_parameters.py`입니다. 생성된 `config/scenes.json`의 `parameters`가 앱 화면·범위·매핑·GPU 슬롯을 연결하고, ISF에도 같은 이름과 범위로 노출됩니다.
+
 ## 파라미터 입력·출력 매핑
 
 메인 화면 및 **씬 연출**의 각 파라미터 이름 옆 **연결 아이콘**을 누릅니다. 입력과 출력은 서로 독립적으로 켜며, 한 씬에서 여러 파라미터가 동시에 동작합니다. 설정은 씬·영상 소스(실시간 생성/원본 재생)·파라미터별로 저장합니다. 기존 씬당 하나의 매핑도 해당 파라미터로 자동 이전합니다.
@@ -67,6 +85,8 @@ OSC 출력의 기본 대상은 `127.0.0.1:9001`이며 주소는 `/orbit/<scene>/
 ```sh
 xcrun swiftc OrbitApp/Sources/ParameterRouting.swift OrbitApp/Tests/ParameterRoutingChecks.swift -o /tmp/orbit-parameter-check
 /tmp/orbit-parameter-check
+xcrun swiftc OrbitApp/Sources/ParameterRouting.swift OrbitApp/Tests/SceneParameterChecks.swift -o /tmp/orbit-scene-parameter-check
+/tmp/orbit-scene-parameter-check OrbitShaders/config/scenes.json
 xcrun swiftc OrbitApp/Sources/ParameterRouting.swift OrbitApp/Sources/ControlOutput.swift OrbitApp/Tests/ControlOutputChecks.swift -o /tmp/orbit-control-output-check
 /tmp/orbit-control-output-check
 ```

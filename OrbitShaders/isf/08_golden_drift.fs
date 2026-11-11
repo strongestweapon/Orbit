@@ -1,6 +1,6 @@
 /*{
   "ISFVSN": "2.0",
-  "VSN": "1.3.0",
+  "VSN": "1.4.0",
   "DESCRIPTION": "금빛 입자와 사라지는 꼬리 / Golden Drift",
   "CREDIT": "SUPERLESS / Orbit project; procedural study based on supplied reference video",
   "CATEGORIES": [
@@ -45,30 +45,6 @@
       "DEFAULT": 0,
       "MIN": 0,
       "MAX": 86400
-    },
-    {
-      "NAME": "density",
-      "LABEL": "density",
-      "TYPE": "float",
-      "DEFAULT": 0.45,
-      "MIN": 0,
-      "MAX": 1
-    },
-    {
-      "NAME": "turbulence",
-      "LABEL": "turbulence",
-      "TYPE": "float",
-      "DEFAULT": 0.4,
-      "MIN": 0,
-      "MAX": 1
-    },
-    {
-      "NAME": "energy",
-      "LABEL": "energy",
-      "TYPE": "float",
-      "DEFAULT": 0.65,
-      "MIN": 0,
-      "MAX": 1
     },
     {
       "NAME": "hueShift",
@@ -153,6 +129,54 @@
       "DEFAULT": 0.03,
       "MIN": 0,
       "MAX": 1
+    },
+    {
+      "NAME": "headWidth",
+      "LABEL": "금빛 머리 길이",
+      "TYPE": "float",
+      "DEFAULT": 1,
+      "MIN": 0.3,
+      "MAX": 2
+    },
+    {
+      "NAME": "particleDensity",
+      "LABEL": "입자 밀도",
+      "TYPE": "float",
+      "DEFAULT": 0.45,
+      "MIN": 0,
+      "MAX": 1
+    },
+    {
+      "NAME": "particleSize",
+      "LABEL": "입자 크기",
+      "TYPE": "float",
+      "DEFAULT": 1,
+      "MIN": 0.3,
+      "MAX": 3
+    },
+    {
+      "NAME": "headGlow",
+      "LABEL": "머리 발광",
+      "TYPE": "float",
+      "DEFAULT": 0.65,
+      "MIN": 0,
+      "MAX": 1
+    },
+    {
+      "NAME": "sparkleStrength",
+      "LABEL": "입자 반짝임",
+      "TYPE": "float",
+      "DEFAULT": 1,
+      "MIN": 0,
+      "MAX": 3
+    },
+    {
+      "NAME": "rippleDepth",
+      "LABEL": "물결 굴곡",
+      "TYPE": "float",
+      "DEFAULT": 0.4,
+      "MIN": 0,
+      "MAX": 1
     }
   ]
 }*/
@@ -181,6 +205,11 @@ struct OrbitParams {
     float gapSoftness;
     float gapMotion;
     float fragmentation;
+    // Scene-specific shape controls; see config/scenes.json.
+    float shape0;
+    float shape1;
+    float shape2;
+    float shape3;
 };
 
 float orbitHash(vec3 p) {
@@ -277,11 +306,11 @@ vec3 orbitShade(vec2 uv, OrbitParams p) {
     float t = p.phaseTime * 0.25;
     float center = orbitLightCenter(p);
     float d = orbitDistance(uv.x, center - 0.04);
-    float head = exp(-d * d * (32.0 + p.density * 28.0));
+    float head = exp(-d * d * (44.6 / max(p.shape0*p.shape0,0.01)));
     float grain = orbitNoise(orbitCircle(uv.x - t * 0.006, uv.y * 1.5,
                             90.0 + p.density * 80.0, t * 0.2, p.seed));
     float cloud = orbitFbm(orbitCircle(uv.x, uv.y * 0.4, 5.0, t * 0.35, p.seed));
-    float spark = pow(smoothstep(0.68,0.95,grain),3.0);
+    float spark = pow(smoothstep(0.68,0.95,grain),3.0/max(p.shape1,0.05));
     vec3 amber = orbitHsv(0.10 + p.hueShift, 0.83, 0.62);
     vec3 gold = orbitHsv(0.13 + p.hueShift, 0.55, 1.0);
     vec3 white = orbitHsv(0.14 + p.hueShift, 0.15, 1.0);
@@ -290,8 +319,9 @@ vec3 orbitShade(vec2 uv, OrbitParams p) {
     vec3 col = amber * (0.035 + head * 0.75) * ripple;
     col += gold * head * ribbon * 0.55;
     col += white * pow(head,2.5) * exp(-uv.y * 5.0) * 1.25;
-    col += gold * spark * (0.18 + head * 0.65);
-    return col * (0.6 + p.energy * 0.75) * orbitBandEdge(uv.y);
+    col *= (0.6+p.energy*0.75)/1.0875;
+    col += gold * spark * p.shape2 * (0.18 + head * 0.65);
+    return col * 1.0875 * orbitBandEdge(uv.y);
 }
 
 void main() {
@@ -300,9 +330,9 @@ void main() {
     p.outputHeight = RENDERSIZE.y;
     p.viewMode = float(viewMode);
     p.phaseTime = externalClock ? clockSeconds : TIME * speed;
-    p.density = density;
-    p.turbulence = turbulence;
-    p.energy = energy;
+    p.density = particleDensity;
+    p.turbulence = rippleDepth;
+    p.energy = headGlow;
     p.hueShift = hueShift;
     p.brightness = brightness;
     p.seed = seed;
@@ -316,6 +346,10 @@ void main() {
     p.gapSoftness = gapSoftness;
     p.gapMotion = gapMotion;
     p.fragmentation = fragmentation;
+    p.shape0 = headWidth;
+    p.shape1 = particleSize;
+    p.shape2 = sparkleStrength;
+    p.shape3 = 1.0;
     vec2 pixel = vec2(isf_FragNormCoord.x, 1.0-isf_FragNormCoord.y) * RENDERSIZE;
     vec3 uv = orbitCoordinates(pixel, p);
     float presence = orbitPresence(uv.xy, p);

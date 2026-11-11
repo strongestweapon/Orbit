@@ -28,8 +28,10 @@ kernel void orbit_texture_compute(device uchar4* output [[buffer(0)]],
 #undef ORBIT_ATAN
 #undef ORBIT_TAU
 '''
-def build_texture_shader():
+def build_texture_shader(regenerate_archive=False):
     (ROOT/'metal/OrbitTexture.metal').write_text(header+(ROOT/'src/common.glsl').read_text()+'\n'+(ROOT/'src/texture_body.metal').read_text()+footer)
+    # Archived hybrid experiments retain their original ABI and source.
+    if not regenerate_archive: return
     common=(ROOT/'src/common.glsl').read_text()
     body=(ROOT/'src/hybrid_body.metal').read_text()
     for src in sorted((ROOT/'src').glob('0*.glsl')):

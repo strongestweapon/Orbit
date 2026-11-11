@@ -76,23 +76,30 @@
 
 5번째 줄의 오른쪽, 전체 콘텐츠 오른쪽 및 아래쪽은 불투명 검정입니다. UI의 빨간 출력 테두리는 셰이더에 포함하지 않습니다. `angleOffset`, `flipU`, `flipV`는 공통 매핑 설정입니다. 앱은 자동·HD·FHD·QHD·4K·직접 입력 해상도와 창/전체화면 출력을 지원합니다. 자동 모드는 출력 창의 실제 픽셀 크기를 사용하며 16:9 외부 여백은 검정입니다. 1:1 픽셀 검사는 4K를 선택하고 3840×2160 화면에서 전체화면으로 진행합니다. 방향·안팎 확인은 실제 LED에서 테스트 패턴으로 진행해야 합니다.
 
+## 씬별 파라미터
+
+`tools/scene_parameters.py`에서 씬별 파라미터의 의미, 범위, 기본값, GPU 슬롯, 기존 항목의 이전 관계를 정의합니다. 생성된 `config/scenes.json`의 각 씬 `parameters`를 사용하세요. 예를 들어 Spectral Fragments의 `barLength`, `barWidth`, `lifetimeRate`는 바 길이·두께·생성/소멸 주기를 독립적으로 제어합니다. 앱과 ISF는 같은 항목을 노출합니다. GPU 슬롯 `density/turbulence/energy`와 `shape0…3`은 내부 저장 위치이며, 사용자에게 보이는 이름은 각 씬의 정의를 따릅니다.
+
+기존 혼합 모드 파일은 보관용으로 일반 빌드에서 재생성하지 않습니다.
+
 ## Metal 앱 연결
 
 `metal/` 파일들을 라이브러리에 컴파일하고 `config/scenes.json`의 `fragmentFunction`을 사용합니다. vertex는 `orbit_fullscreen_vertex`, 삼각형 정점 수는 3입니다. 실제 픽셀 기준 drawable 크기와 viewport를 사용합니다.
 
 **컴파일 시 `MTLCompileOptions.fastMathEnabled = false`를 사용하십시오.** 정밀한 극좌표 변환과 노이즈 계산을 위해 이 설정으로 실제 검증했습니다. 빠른 수학 모드에서는 일부 각도에 미세한 선이 발생할 수 있습니다.
 
-fragment의 uniform은 `buffer(0)`에 80바이트로 전달합니다. compute의 경우 출력 RGBA8 버퍼가 `buffer(0)`, uniform이 `buffer(1)`입니다. 20개 float32를 다음 순서대로 저장합니다. JSON의 `uniformBuffer.fields`가 기준입니다.
+fragment의 uniform은 `buffer(0)`에 96바이트로 전달합니다. compute의 경우 출력 RGBA8 버퍼가 `buffer(0)`, uniform이 `buffer(1)`입니다. 24개 float32를 다음 순서대로 저장합니다. JSON의 `uniformBuffer.fields`가 기준입니다.
 
 ```text
 outputWidth, outputHeight, viewMode, phaseTime,
 density, turbulence, energy, hueShift,
 brightness, seed, angleOffset, flipU,
 flipV, ringWidth, testPattern, markerWidth,
-coverage, gapSoftness, gapMotion, fragmentation
+coverage, gapSoftness, gapMotion, fragmentation,
+shape0, shape1, shape2, shape3
 ```
 
-보관된 혼합 모드의 진입점 `orbit_hybrid_<scene ID>_fragment`는 기존 80바이트를 유지하고 **추가 buffer(1)에 16바이트** `generation, sharpness, evolution, detail`을 전달합니다. compute에서는 추가 버퍼가 `buffer(2)`입니다. 참조 PNG는 `texture(0)`입니다. 구현은 `src/hybrid_body.metal`, 생성 결과는 `metal/OrbitHybrid_*.metal`이며 이전 네이티브 Metal 전용 구현입니다. 현재 앱은 이 진입점을 사용하지 않습니다. 현재 실시간 생성과 ISF는 위의 80바이트 uniform과 씬별 코드 생성 진입점을 사용합니다.
+보관된 혼합 모드의 진입점 `orbit_hybrid_<scene ID>_fragment`는 기존 80바이트를 유지하고 **추가 buffer(1)에 16바이트** `generation, sharpness, evolution, detail`을 전달합니다. compute에서는 추가 버퍼가 `buffer(2)`입니다. 참조 PNG는 `texture(0)`입니다. 구현은 `src/hybrid_body.metal`, 생성 결과는 `metal/OrbitHybrid_*.metal`이며 이전 네이티브 Metal 전용 구현입니다. 현재 앱은 이 진입점을 사용하지 않습니다. 현재 실시간 생성과 ISF는 위의 96바이트 uniform과 씬별 코드 생성 진입점을 사용합니다.
 
 색상은 display-referred SDR RGB입니다. `RGBA8Unorm` 출력 기준이며, 이미 표시용으로 설계된 값을 sRGB render target에서 다시 인코딩하지 않습니다. 앱의 전체 색관리 파이프라인에 선형 중간 합성을 도입한다면 입력/출력 변환을 명시적으로 적용해야 합니다.
 
@@ -104,7 +111,7 @@ coverage, gapSoftness, gapMotion, fragmentation
 
 영상 참조 씬 01–05는 기본 `coverage=1`입니다. 원본에 없는 일괄적인 검정 틈을 제거했고, 유체·청록색의 어두운 부분은 각 셰이더 내부 명암으로 생성합니다. 스틸컷 기반 07의 조각 소멸은 각 조각의 수식에서, 08의 어두운 꼬리는 머리 밝기와 범위에서 생성합니다. 범위를 줄이면 추가 소등 연출이 적용됩니다.
 
-네이티브/ISF/GPU 검증 도구를 함께 업데이트한 80바이트 uniform 버전입니다. 예전 64바이트 호스트와 혼용하지 마세요.
+네이티브/ISF/GPU 검증 도구를 함께 업데이트한 96바이트 uniform 버전입니다. 예전 64/80바이트 호스트와 혼용하지 마세요.
 
 ## 시간과 센서 매핑
 

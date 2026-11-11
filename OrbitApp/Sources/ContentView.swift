@@ -139,7 +139,11 @@ struct ContentView: View {
                 MappedParameterSlider(model:model,key:"speed",title:"속도",range:0...3,suffix:"×").frame(width:145)
             }
             MappedParameterSlider(model:model,key:"brightness",title:"밝기").frame(width:145)
-            if model.selectedScene?.testScene == false {MappedParameterSlider(model:model,key:"energy",title:model.usesTexture ? "발광" : "에너지").frame(width:145)}
+            if model.selectedScene?.testScene == false {
+                let control = model.quickParameter
+                MappedParameterSlider(model:model,key:control.id,title:model.usesTexture ? "발광" : control.title,
+                                      range:control.range,suffix:control.unit).frame(width:170)
+            }
             Spacer(minLength:0)
             Button {panel = .look} label:{Label("씬 연출",systemImage:"slider.horizontal.3")}
                 .disabled(model.selectedScene?.testScene == true).accessibilityIdentifier("openLook")
@@ -208,6 +212,33 @@ private struct OrbitSettingsPanel: View {
             .onAppear {selectedSensor=model.sensors.first?.id}
     }
     private var look:some View {
+        Group {
+            if model.usesTexture { referenceLook } else { shaderLook }
+        }
+    }
+    private var shaderLook:some View {
+        VStack(alignment:.leading,spacing:15) {
+            Picker("연출 설정",selection:$tab) {
+                Text("형태").tag(0);Text("질감 · 색").tag(1);Text("빛 · 소멸").tag(2)
+            }.pickerStyle(.segmented)
+            if tab < 2 {
+                ForEach(model.shaderParameters.filter { $0.group == tab }) { control in
+                    parameter(control.title,control.id,range:control.minimum...control.maximum)
+                }
+                if tab == 1 {parameter("색상 이동","hueShift",range:-0.5...0.5)}
+                Text("\(model.selectedScene?.name ?? "") 전용 조절 · 이름에 마우스를 올리면 설명 · 연결 버튼으로 개별 입력 / 출력")
+                    .font(.system(size:10)).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
+            } else {
+                parameter("빛이 남는 범위","coverage")
+                parameter("소멸 경계 부드러움","gapSoftness")
+                parameter("빈 구간 이동","gapMotion")
+                parameter("조각화","fragmentation")
+                Text("링의 점등 범위와 빈 구간을 제어합니다. 범위 0은 전체 소등, 1은 전체 범위입니다.")
+                    .font(.system(size:10)).foregroundStyle(.secondary)
+            }
+        }
+    }
+    private var referenceLook:some View {
         VStack(alignment:.leading,spacing:15) {
             Picker("연출 설정",selection:$tab) {Text("밀도 · 색").tag(0);Text("움직임").tag(1);Text("빛 · 소멸").tag(2)}.pickerStyle(.segmented)
             if tab==0 {
@@ -328,7 +359,7 @@ private struct OrbitSettingsPanel: View {
         }.font(.system(size:12))
     }
     private func parameter(_ title:String,_ key:String,range:ClosedRange<Double>=0...1)->some View {
-        MappedParameterSlider(model:model,key:key,title:title,range:range)
+        MappedParameterSlider(model:model,key:key,title:title,range:range,suffix:model.parameterSpec(key).unit)
     }
     private func boolBinding(_ key:String)->Binding<Bool> {Binding(get:{model.value(key)>0.5},set:{model.setValue(key,$0 ? 1:0)})}
     private func labeled<V:View>(_ title:String,@ViewBuilder content:()->V)->some View {

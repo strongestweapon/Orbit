@@ -1,6 +1,6 @@
 /*{
   "ISFVSN": "2.0",
-  "VSN": "1.3.0",
+  "VSN": "1.4.0",
   "DESCRIPTION": "청록색 헤일로 / Cyan Halo",
   "CREDIT": "SUPERLESS / Orbit project; procedural study based on supplied reference video",
   "CATEGORIES": [
@@ -45,30 +45,6 @@
       "DEFAULT": 0,
       "MIN": 0,
       "MAX": 86400
-    },
-    {
-      "NAME": "density",
-      "LABEL": "density",
-      "TYPE": "float",
-      "DEFAULT": 0.32,
-      "MIN": 0,
-      "MAX": 1
-    },
-    {
-      "NAME": "turbulence",
-      "LABEL": "turbulence",
-      "TYPE": "float",
-      "DEFAULT": 0.4,
-      "MIN": 0,
-      "MAX": 1
-    },
-    {
-      "NAME": "energy",
-      "LABEL": "energy",
-      "TYPE": "float",
-      "DEFAULT": 0.65,
-      "MIN": 0,
-      "MAX": 1
     },
     {
       "NAME": "hueShift",
@@ -153,6 +129,54 @@
       "DEFAULT": 0.0,
       "MIN": 0,
       "MAX": 1
+    },
+    {
+      "NAME": "beamWidth",
+      "LABEL": "밝은 구간 길이",
+      "TYPE": "float",
+      "DEFAULT": 1,
+      "MIN": 0.2,
+      "MAX": 2.5
+    },
+    {
+      "NAME": "haloWidth",
+      "LABEL": "헤일로 폭",
+      "TYPE": "float",
+      "DEFAULT": 1,
+      "MIN": 0.1,
+      "MAX": 1
+    },
+    {
+      "NAME": "foldScale",
+      "LABEL": "표면 주름 밀도",
+      "TYPE": "float",
+      "DEFAULT": 0.32,
+      "MIN": 0,
+      "MAX": 1
+    },
+    {
+      "NAME": "haloGlow",
+      "LABEL": "헤일로 발광",
+      "TYPE": "float",
+      "DEFAULT": 0.65,
+      "MIN": 0,
+      "MAX": 1
+    },
+    {
+      "NAME": "foldDistortion",
+      "LABEL": "주름 뒤틀림",
+      "TYPE": "float",
+      "DEFAULT": 0.4,
+      "MIN": 0,
+      "MAX": 1
+    },
+    {
+      "NAME": "acceleration",
+      "LABEL": "회전 가속",
+      "TYPE": "float",
+      "DEFAULT": 1,
+      "MIN": 0,
+      "MAX": 2
     }
   ]
 }*/
@@ -181,6 +205,11 @@ struct OrbitParams {
     float gapSoftness;
     float gapMotion;
     float fragmentation;
+    // Scene-specific shape controls; see config/scenes.json.
+    float shape0;
+    float shape1;
+    float shape2;
+    float shape3;
 };
 
 float orbitHash(vec3 p) {
@@ -275,7 +304,7 @@ float orbitBandEdge(float v) {
 // Reference 106–126s: counterclockwise flow (~4.2 s/turn initially), then acceleration.
 // Analytic velocity integral, not sampled frames or video textures.
 // After the observed acceleration, ease back over six seconds for continuous playback.
-float cyanTurns(float seconds) {
+float cyanTurns(float seconds, float acceleration) {
     float cycle = floor(seconds / 26.0);
     float local = seconds - cycle * 26.0;
     float ramp = clamp(local - 10.0, 0.0, 10.0);
@@ -283,11 +312,13 @@ float cyanTurns(float seconds) {
     float release = clamp((local - 20.0) / 6.0, 0.0, 1.0);
     extra += 6.449496 * (release - release * release * release
                               + 0.5 * release * release * release * release);
-    return 0.24029088 * seconds + cycle * 6.807468 + extra;
+    return 0.24029088 * seconds + acceleration * (cycle * 6.807468 + extra);
 }
 
 vec3 orbitShade(vec2 uv, OrbitParams p) {
-    float turns = cyanTurns(p.phaseTime);
+    uv.y /= max(p.shape1,0.05);
+    if (uv.y >= 1.0) return vec3(0.0);
+    float turns = cyanTurns(p.phaseTime,p.shape2);
     float center = 0.70111796 - turns - 0.03140367 * sin(p.phaseTime * 1.5)
                    + 0.04010302 * cos(p.phaseTime * 1.5);
     float a = ORBIT_TAU * (uv.x - center);
@@ -296,7 +327,7 @@ vec3 orbitShade(vec2 uv, OrbitParams p) {
     float n = orbitFbm(orbitCircle(uv.x + turns, uv.y * 0.4,
                                   2.4 + p.density * 3.0, textureTime, p.seed));
     float distortion = (n - 0.5) * p.turbulence * 0.65;
-    float sweep = 0.5 + 0.5 * cos(a + distortion);
+    float sweep = pow(0.5 + 0.5 * cos(a + distortion),1.0/max(p.shape0,0.05));
     vec3 deep = orbitHsv(0.618 + p.hueShift, 0.91, 0.43);
     vec3 cyan = orbitHsv(0.555 + p.hueShift, 0.68, 0.94);
     vec3 white = orbitHsv(0.510 + p.hueShift, 0.18, 1.0);
@@ -315,9 +346,9 @@ void main() {
     p.outputHeight = RENDERSIZE.y;
     p.viewMode = float(viewMode);
     p.phaseTime = externalClock ? clockSeconds : TIME * speed;
-    p.density = density;
-    p.turbulence = turbulence;
-    p.energy = energy;
+    p.density = foldScale;
+    p.turbulence = foldDistortion;
+    p.energy = haloGlow;
     p.hueShift = hueShift;
     p.brightness = brightness;
     p.seed = seed;
@@ -331,6 +362,10 @@ void main() {
     p.gapSoftness = gapSoftness;
     p.gapMotion = gapMotion;
     p.fragmentation = fragmentation;
+    p.shape0 = beamWidth;
+    p.shape1 = haloWidth;
+    p.shape2 = acceleration;
+    p.shape3 = 1.0;
     vec2 pixel = vec2(isf_FragNormCoord.x, 1.0-isf_FragNormCoord.y) * RENDERSIZE;
     vec3 uv = orbitCoordinates(pixel, p);
     float presence = orbitPresence(uv.xy, p);
