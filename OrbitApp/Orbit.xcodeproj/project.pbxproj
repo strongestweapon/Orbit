@@ -22,6 +22,7 @@
 		9B98678E642671FB812C13BE /* OSCReceiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 442ABBD99849283C21E7F61F /* OSCReceiver.swift */; };
 		A75402C429AFB995A4186408 /* OutputWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB8BB74462AC42160005915D /* OutputWindowController.swift */; };
 		AF0E293E391BF8855FC7AD85 /* metal in Resources */ = {isa = PBXBuildFile; fileRef = 698220E0EBB4933D774EE19E /* metal */; };
+		B11CE072C78508F1B065CCC1 /* ConnectionViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1BBF405377E23759F08F916 /* ConnectionViews.swift */; };
 		B6033C55F8A1E82FA82B6020 /* OrbitModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C8A50C94742D7DA18CF8FB1 /* OrbitModel.swift */; };
 		BD0312FB7E1888AA3639BBCD /* OrbitLogo.png in Resources */ = {isa = PBXBuildFile; fileRef = 332AC379A0E28B5E029787A2 /* OrbitLogo.png */; };
 		C0BC95029586B3FBB9B29D4A /* OrbitApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADFAA53066E70B7AA6CD3986 /* OrbitApp.swift */; };
@@ -50,6 +51,7 @@
 		B23ACF8A6EDC193ECA1207A0 /* OrbitTextureSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrbitTextureSource.swift; sourceTree = "<group>"; };
 		CFBAF8129D2DC544A2451FB4 /* textures */ = {isa = PBXFileReference; lastKnownFileType = folder; name = textures; path = ../OrbitTextures/textures; sourceTree = SOURCE_ROOT; };
 		DD41E236F79EDE0F2637CC5A /* ParameterRouting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParameterRouting.swift; sourceTree = "<group>"; };
+		F1BBF405377E23759F08F916 /* ConnectionViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionViews.swift; sourceTree = "<group>"; };
 		FFFC97DCF2880340E48CD95A /* OrbitAppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = OrbitAppIcon.icns; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -98,6 +100,7 @@
 		D0DC853F0023AB4D57FBEFC2 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				F1BBF405377E23759F08F916 /* ConnectionViews.swift */,
 				49871CDB0B18BD84E815765F /* ContentView.swift */,
 				260FEB427A3C3B0643D4E51F /* ControlOutput.swift */,
 				B11E32FED746AE6ED06BF720 /* MetalRenderer.swift */,
@@ -191,6 +194,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B11CE072C78508F1B065CCC1 /* ConnectionViews.swift in Sources */,
 				8DC5BD10D27A221949CB860F /* ContentView.swift in Sources */,
 				49CBEE7CE26D0D6B540F5281 /* ControlOutput.swift in Sources */,
 				6AD4E83C3CF65EF2EDA5C33C /* MetalRenderer.swift in Sources */,
@@ -264,7 +268,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -279,7 +283,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.4.0;
+				MARKETING_VERSION = 0.5.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -345,7 +349,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -366,7 +370,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.4.0;
+				MARKETING_VERSION = 0.5.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

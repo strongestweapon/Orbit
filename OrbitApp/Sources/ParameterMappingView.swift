@@ -49,10 +49,11 @@ struct ParameterRouteButton: View {
     }
 }
 
-private struct ParameterRoutingPopover: View {
+struct ParameterRoutingPopover: View {
     @ObservedObject var model: OrbitModel
     let key: String
     let title: String
+    var initialTab = 0
     let close: () -> Void
     @State private var tab = 0
     private var route: ParameterRoute { model.route(for:key) }
@@ -63,7 +64,7 @@ private struct ParameterRoutingPopover: View {
         Binding(get:{route.input[keyPath:path]},set:{value in model.setRoute(key) {$0.input[keyPath:path]=value}})
     }
     private func output<T>(_ path: WritableKeyPath<ParameterOutputRoute,T>) -> Binding<T> {
-        Binding(get:{route.output[keyPath:path]},set:{value in model.setRoute(key) {$0.output[keyPath:path]=value}})
+        Binding(get:{route.output[keyPath:path]},set:{value in model.setRoute(key) {$0.output[keyPath:path]=value;$0.output.configured=true}})
     }
     var body: some View {
         VStack(alignment:.leading,spacing:13) {
@@ -85,11 +86,15 @@ private struct ParameterRoutingPopover: View {
             Spacer(minLength:0)
             Divider()
             HStack {
-                Text("이 파라미터에만 적용 · 자동 저장").font(.system(size:10)).foregroundStyle(.secondary)
+                if tab == 1 {
+                    Button("출력 연결 삭제",role:.destructive) {model.clearControlOutput(key);close()}
+                        .accessibilityIdentifier("routeDeleteOutput")
+                } else {Text("이 파라미터에만 적용 · 자동 저장").font(.system(size:10)).foregroundStyle(.secondary)}
                 Spacer(); Button("닫기",action:close).keyboardShortcut(.cancelAction)
             }
-        }.padding(18).frame(width:460,height:580).background(Color(white:0.07)).font(.system(size:12))
+        }.padding(18).frame(width:460,height:630).background(Color(white:0.07)).font(.system(size:12))
             .textFieldStyle(.roundedBorder).preferredColorScheme(.dark)
+            .onAppear {tab=initialTab}
     }
     private var inputPanel: some View {
         VStack(alignment:.leading,spacing:13) {
@@ -105,7 +110,7 @@ private struct ParameterRoutingPopover: View {
                 }.foregroundStyle(.secondary)
                 Text("센서 범위 \(sensor.minimum.formatted()) … \(sensor.maximum.formatted()) → 아래 영상 값으로 변환")
                     .font(.system(size:10)).foregroundStyle(.secondary)
-            } else {Text("센서는 메인 화면의 ‘센서’에서 추가할 수 있습니다.").font(.system(size:10)).foregroundStyle(.secondary)}
+            } else {Text("메인 화면의 ‘입력 센서’에서 추가할 수 있습니다.").font(.system(size:10)).foregroundStyle(.secondary)}
             HStack(spacing:14) {
                 field("영상 최소",value:input(\.minimum),id:"routeInputMin")
                 field("영상 최대",value:input(\.maximum),id:"routeInputMax")
@@ -132,8 +137,15 @@ private struct ParameterRoutingPopover: View {
     private var outputPanel: some View {
         VStack(alignment:.leading,spacing:11) {
             Toggle("이 파라미터 송신",isOn:output(\.enabled)).accessibilityIdentifier("routeOutputEnabled")
+            VStack(alignment:.leading,spacing:4) {
+                Text("제어 대상 이름").font(.system(size:10)).foregroundStyle(.secondary)
+                TextField("예: Live · Filter Cutoff",text:Binding(get:{route.output.targetName ?? ""},set:{value in
+                    model.setRoute(key) {$0.output.targetName=value;$0.output.configured=true}
+                })).accessibilityIdentifier("routeTargetName")
+                Text("직접 붙이는 이름입니다. Live의 대상은 MIDI Map에서 연결하세요.").font(.system(size:10)).foregroundStyle(.secondary)
+            }
             Picker("전달 방식",selection:Binding(get:{route.output.transport},set:{transport in
-                model.setRoute(key) {$0.output.transport=transport;$0.output.minimum=0;$0.output.maximum=transport == .midi ? 127 : 1}
+                model.setRoute(key) {$0.output.transport=transport;$0.output.minimum=0;$0.output.maximum=transport == .midi ? 127 : 1;$0.output.configured=true}
             })) {ForEach(ControlTransport.allCases) {Text($0.label).tag($0)}}.accessibilityIdentifier("routeTransport")
             if route.output.transport == .midi {
                 Text("가상 MIDI 포트: Orbit Control").font(.system(size:11,weight:.medium))

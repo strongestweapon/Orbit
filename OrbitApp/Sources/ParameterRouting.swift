@@ -9,6 +9,16 @@ struct SensorInput: Identifiable, Codable {
     var maximum: Double = 100
     var value: Double?
     var receivedAt: Date?
+
+    func receptionState(running: Bool, now: Date) -> SensorReceptionState {
+        guard running else { return .stopped }
+        guard value?.isFinite == true, let receivedAt else { return .waiting }
+        return now.timeIntervalSince(receivedAt) < 90 ? .receiving : .stale
+    }
+}
+
+enum SensorReceptionState: String {
+    case stopped = "수신 꺼짐", waiting = "수신 대기", receiving = "수신됨", stale = "90초 이상 없음"
 }
 
 // Kept for decoding existing installations; new routing is indexed by parameter.
@@ -81,6 +91,9 @@ enum ControlTransport: String, Codable, CaseIterable, Identifiable {
 
 struct ParameterOutputRoute: Codable, Equatable {
     var enabled = false
+    // Optional fields keep settings saved before the connection list decodable.
+    var targetName: String?
+    var configured: Bool?
     var transport: ControlTransport = .midi
     var channel = 1
     var controller = 20
@@ -89,6 +102,16 @@ struct ParameterOutputRoute: Codable, Equatable {
     var address = "/orbit/value"
     var minimum: Double = 0
     var maximum: Double = 127
+    var endpointLabel: String {
+        transport == .midi ? "MIDI · CH \(channel) / CC \(controller)" : "\(host):\(port)\(address)"
+    }
+    var displayName: String {
+        let label = targetName?.trimmingCharacters(in:.whitespacesAndNewlines) ?? ""
+        return label.isEmpty ? (transport == .midi ? "Live · CC \(controller)" : address) : label
+    }
+    func isListed(defaultRoute: ParameterOutputRoute) -> Bool {
+        enabled || configured == true || self != defaultRoute
+    }
     var destinationKey: String {
         transport == .midi ? "midi:\(channel):\(controller)" : "osc:\(host.trimmingCharacters(in:.whitespaces)):\(port):\(address)"
     }

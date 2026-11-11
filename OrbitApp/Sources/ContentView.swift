@@ -15,6 +15,7 @@ private enum OrbitPanel: String, Identifiable {
 struct ContentView: View {
     @ObservedObject var model: OrbitModel
     @State private var panel: OrbitPanel?
+    @State private var initialSensorID: UUID?
     var body: some View {
         VStack(spacing:0) {
             transport
@@ -49,12 +50,14 @@ struct ContentView: View {
             Divider()
             sceneControls
             Divider()
-            sensorStrip
+            ConnectionStrip(model:model) { sensorID in
+                initialSensorID=sensorID;panel = .sensors
+            }
             footer
         }
         .background(Color(white:0.045)).tint(orbitAccent)
         .sheet(item:$panel) { selected in
-            OrbitSettingsPanel(model:model,panel:selected) { panel=nil }
+            OrbitSettingsPanel(model:model,panel:selected,initialSensorID:$initialSensorID) { panel=nil }
         }
         .alert("Orbit",isPresented:Binding(get:{model.errorMessage != nil},set:{if !$0 {model.errorMessage=nil}})) {
             Button("확인",role:.cancel){model.errorMessage=nil}
@@ -139,9 +142,6 @@ struct ContentView: View {
                 Spacer()
                 Button {panel = .look} label:{Label(model.usesTexture ? "원본 조절" : "공통 조절",systemImage:"slider.horizontal.3")}
                     .disabled(model.selectedScene?.testScene == true).accessibilityIdentifier("openLook")
-                Toggle("제어 출력 \(model.activeControlOutputCount)",isOn:$model.controlOutputEnabled)
-                    .toggleStyle(.switch).controlSize(.small).fixedSize().accessibilityIdentifier("controlOutputToggle")
-                    .help("각 파라미터 옆 연결 버튼에서 입력·출력을 설정하세요.")
             }.frame(height:22)
             if model.selectedScene?.testScene == true {
                 HStack(spacing:24) {
@@ -165,26 +165,6 @@ struct ContentView: View {
             }
         }.padding(.horizontal,20).padding(.vertical,12).background(orbitPanel)
     }
-    private var sensorStrip: some View {
-        HStack(spacing:14) {
-            Button {panel = .sensors} label:{Label("센서 \(model.sensors.count)",systemImage:"waveform.path")}
-                .buttonStyle(.borderless).accessibilityIdentifier("openSensors")
-            ForEach(Array(model.sensors.prefix(3))) {sensor in
-                HStack(spacing:6) {
-                    SensorDot(sensor:sensor)
-                    Text(sensor.name).lineLimit(1)
-                    Text(sensor.value.map{String(format:"%.1f",$0)} ?? "—").monospacedDigit().foregroundStyle(orbitAccent)
-                }.font(.system(size:10)).padding(.horizontal,10).padding(.vertical,5)
-                    .background(Color.white.opacity(0.04),in:Capsule())
-            }
-            if model.sensors.count>3 {Button("+\(model.sensors.count-3)"){panel = .sensors}.buttonStyle(.borderless)}
-            Spacer()
-            Text(model.oscState).font(.system(size:10)).foregroundStyle(.secondary)
-            Button(model.oscRunning ? "수신 중지" : "수신 시작") {
-                if model.oscRunning {model.stopOSC()} else {model.startOSC()}
-            }.controlSize(.small)
-        }.padding(.horizontal,20).frame(height:43)
-    }
     private var footer: some View {
         HStack {
             Text(model.usesTexture ? "추출 원본 재생" : "실시간 코드 생성 · 이미지/영상 텍스처 없음")
@@ -205,6 +185,7 @@ struct ContentView: View {
 private struct OrbitSettingsPanel: View {
     @ObservedObject var model:OrbitModel
     let panel:OrbitPanel
+    @Binding var initialSensorID: UUID?
     let close:()->Void
     @State private var tab=0
     @State private var selectedSensor:UUID?
@@ -223,7 +204,10 @@ private struct OrbitSettingsPanel: View {
                 Spacer();Button("닫기",action:close).keyboardShortcut(.defaultAction)
             }.padding(16)
         }.frame(width:640,height:520).background(Color(white:0.07)).tint(orbitAccent)
-            .onAppear {selectedSensor=model.sensors.first?.id}
+            .onAppear {
+                selectedSensor=initialSensorID ?? model.sensors.first?.id
+                sensorPage=(model.sensors.firstIndex {$0.id==selectedSensor} ?? 0)/6
+            }
     }
     private var look:some View {
         Group {
@@ -292,7 +276,7 @@ private struct OrbitSettingsPanel: View {
                 VStack(spacing:5) {
                     ForEach(Array(model.sensors.dropFirst(sensorPage*6).prefix(6))) {sensor in
                         Button {selectedSensor=sensor.id} label:{
-                            HStack {SensorDot(sensor:sensor);Text(sensor.name).lineLimit(1);Spacer()}.padding(9).frame(height:35)
+                            HStack {SensorDot(sensor:sensor,running:model.oscRunning);Text(sensor.name).lineLimit(1);Spacer()}.padding(9).frame(height:35)
                                 .background(selectedSensor==sensor.id ? Color.white.opacity(0.11) : .clear,in:RoundedRectangle(cornerRadius:5))
                         }.buttonStyle(.plain)
                     }
@@ -310,7 +294,7 @@ private struct OrbitSettingsPanel: View {
                         labeled("OSC 주소") {TextField("/park/sensor",text:sensor.address).font(.system(size:11,design:.monospaced))}
                         HStack {labeled("입력 최소") {TextField("0",value:sensor.minimum,format:.number)};labeled("입력 최대") {TextField("100",value:sensor.maximum,format:.number)}}
                         Stepper("OSC 인수 \(sensor.wrappedValue.argument)",value:sensor.argument,in:0...15)
-                        HStack {Text("현재 값").foregroundStyle(.secondary);Spacer();Text(sensor.wrappedValue.value.map{String(format:"%.2f",$0)} ?? "대기 중").monospacedDigit()}
+                        HStack {Text("마지막 수신 값").foregroundStyle(.secondary);Spacer();Text(sensor.wrappedValue.value.map{String(format:"%.2f",$0)} ?? "대기 중").monospacedDigit()}
                         Button("입력 삭제",role:.destructive) {
                             let id=sensor.wrappedValue.id;model.sensors.removeAll{$0.id==id};selectedSensor=model.sensors.first?.id;sensorPage=min(sensorPage,max(0,(model.sensors.count-1)/6))
                         }
@@ -387,12 +371,13 @@ private struct OrbitSettingsPanel: View {
     }
 }
 
-private struct SensorDot:View {
+struct SensorDot:View {
     let sensor:SensorInput
+    let running:Bool
     var body:some View {
         TimelineView(.periodic(from:.now,by:1)){context in
-            let age=sensor.receivedAt.map{context.date.timeIntervalSince($0)}
-            Circle().fill(age==nil ? Color.gray : (age!<90 ? orbitAccent : .orange)).frame(width:6,height:6)
+            let state=sensor.receptionState(running:running,now:context.date)
+            Circle().fill(state == .receiving ? orbitAccent : (state == .stale ? .orange : .gray)).frame(width:6,height:6)
         }
     }
 }

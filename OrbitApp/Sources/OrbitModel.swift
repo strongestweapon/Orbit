@@ -72,6 +72,7 @@ final class OrbitModel: ObservableObject {
         didSet { controlOutput.reset(); controlOutputStatus = controlOutputEnabled ? "제어 송신 대기" : "제어 자동 송신 꺼짐" }
     }
     @Published var controlOutputStatus = "제어 자동 송신 꺼짐"
+    @Published private(set) var controlDeliveries: [String:ControlDelivery] = [:]
     let receiver = OSCReceiver()
     let controlOutput = ControlOutput()
     let comparison = ComparisonPlayback()
@@ -115,6 +116,24 @@ final class OrbitModel: ObservableObject {
     var manualPlaybackSpeed: Float { usesTexture ? (activeSettings.values["texture.speed"] ?? 1) : activeSettings.speed }
     var playbackSpeed: Float { Float(parameterValues["speed"] ?? Double(manualPlaybackSpeed)) }
     var activeControlOutputCount: Int { activeRoutes.values.filter { $0.output.enabled }.count }
+    var outputParameterSpecs: [ParameterSpec] {
+        guard selectedScene?.testScene == false else { return [] }
+        return parameterSpecs.filter { spec in
+            guard let route = activeRoutes[spec.id]?.output else { return false }
+            return route.isListed(defaultRoute:ParameterRoute.defaults(scene:selectedSceneID,parameter:spec.id,spec:spec).output)
+        }
+    }
+    func controlEmissionID(_ key: String) -> String { "\(selectedSceneID):\(renderStyle):\(key)" }
+    func controlDelivery(for key: String) -> ControlDelivery? {
+        guard let delivery = controlDeliveries[controlEmissionID(key)],
+              delivery.destination == route(for:key).output.destinationKey else { return nil }
+        return delivery
+    }
+    func clearControlOutput(_ key: String) {
+        let original = ParameterRoute.defaults(scene:selectedSceneID,parameter:key,spec:parameterSpec(key)).output
+        controlDeliveries.removeValue(forKey:controlEmissionID(key))
+        setRoute(key) { $0.output = original }
+    }
     var playbackTimeLabel: String {
         let tenths = Int(max(0,playbackSeconds)*10)
         return String(format:"%02d:%02d.%d",tenths/600,(tenths/10)%60,tenths%10)
@@ -220,6 +239,9 @@ final class OrbitModel: ObservableObject {
                 }
             }
         }
+        controlOutput.onDelivery = { [weak self] delivery in
+            DispatchQueue.main.async { self?.controlDeliveries[delivery.id] = delivery }
+        }
         controlOutput.prepare()
         refreshParameters(delta:0)
         let timer = Timer(timeInterval:1.0/30.0,repeats:true) { [weak self] _ in
@@ -307,9 +329,10 @@ final class OrbitModel: ObservableObject {
         guard let spec = parameterSpecs.first(where: { $0.id == key }), outputIssue(for:key) == nil else { return }
         // Isolate this parameter during Live's MIDI learn, even if other routes were transmitting.
         controlOutputEnabled = false
+        setRoute(key) { $0.output.configured = true }
         let route = route(for:key).output
         if let value = route.mappedValue(parameterValues[key] ?? baseParameterValue(key),spec:spec) {
-            controlOutput.send([ControlEmission(id:key,route:route,value:value)],force:true)
+            controlOutput.send([ControlEmission(id:controlEmissionID(key),route:route,value:value)],force:true)
         }
     }
     private func resetParameterState() {
@@ -326,7 +349,7 @@ final class OrbitModel: ObservableObject {
         let emissions = parameterSpecs.compactMap { spec -> ControlEmission? in
             guard let route = routes[spec.id]?.output, route.enabled, outputIssue(for:spec.id) == nil,
                   let value = route.mappedValue(resolved[spec.id] ?? baseParameterValue(spec.id),spec:spec) else { return nil }
-            return ControlEmission(id:"\(selectedSceneID):\(renderStyle):\(spec.id)",route:route,value:value)
+            return ControlEmission(id:controlEmissionID(spec.id),route:route,value:value)
         }
         controlOutput.send(emissions)
     }

@@ -8,9 +8,19 @@ struct ControlEmission {
     let value: Double
 }
 
+struct ControlDelivery {
+    let id: String
+    let destination: String
+    let value: Double
+    let at: Date
+    let error: String?
+}
+
 /// A virtual MIDI input visible to Live, plus independently addressed OSC/UDP destinations.
 final class ControlOutput {
     var onStatus: ((String) -> Void)?
+    /// Local transport completion, not acknowledgement from Live or an OSC receiver.
+    var onDelivery: ((ControlDelivery) -> Void)?
     private let queue = DispatchQueue(label:"studio.superless.orbit.control-output")
     private var client = MIDIClientRef()
     private var source = MIDIEndpointRef()
@@ -62,6 +72,9 @@ final class ControlOutput {
                     if self.sendMIDI(channel:route.channel,controller:route.controller,value:Int(value)) {
                         self.sent[emission.id] = (route.destinationKey,value,now)
                         self.report(force ? "MIDI 테스트 송신 · CH \(route.channel) CC \(route.controller)" : "MIDI 송신 · \(self.portName)")
+                        self.delivered(emission,value:value)
+                    } else {
+                        self.delivered(emission,value:value,error:"MIDI 송신 실패")
                     }
                 } else {
                     self.sendOSC(emission,value:value,now:now,force:force)
@@ -102,10 +115,15 @@ final class ControlOutput {
                 self.retryAfter[key] = ProcessInfo.processInfo.systemUptime+2
                 if self.connections[key] === connection { self.connections.removeValue(forKey:key)?.cancel() }
                 self.report("OSC 송신 실패 · \(error.localizedDescription)")
+                self.delivered(emission,value:value,error:error.localizedDescription)
             } else {
                 self.report(force ? "OSC 테스트 송신 · \(route.address)" : "OSC 송신 · \(key) (수신 확인 아님)")
+                self.delivered(emission,value:value)
             }
         })
+    }
+    private func delivered(_ emission: ControlEmission, value: Double, error: String? = nil) {
+        onDelivery?(ControlDelivery(id:emission.id,destination:emission.route.destinationKey,value:value,at:Date(),error:error))
     }
     private func report(_ text: String) {
         guard status != text else { return }; status = text; onStatus?(text)

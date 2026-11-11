@@ -47,6 +47,24 @@ import Foundation
         precondition(decoded.textureParameterRoutes?["brightness"]?.input.maximum == 0.8)
 
         let midi = ParameterOutputRoute()
+        let oldOutput = """
+        {"enabled":true,"transport":"midi","channel":2,"controller":74,"host":"127.0.0.1","port":9001,"address":"/orbit/value","minimum":0,"maximum":127}
+        """
+        var existingOutput = try JSONDecoder().decode(ParameterOutputRoute.self,from:Data(oldOutput.utf8))
+        precondition(existingOutput.targetName == nil && existingOutput.configured == nil)
+        precondition(existingOutput.isListed(defaultRoute:midi))
+        existingOutput.enabled=false
+        precondition(existingOutput.isListed(defaultRoute:midi),"Disabled custom endpoints must remain visible")
+        var draftOutput=midi;draftOutput.configured=true;draftOutput.targetName="Live · Filter Cutoff"
+        let reloadedOutput=try JSONDecoder().decode(ParameterOutputRoute.self,from:JSONEncoder().encode(draftOutput))
+        precondition(reloadedOutput.isListed(defaultRoute:midi) && reloadedOutput.displayName=="Live · Filter Cutoff")
+        precondition(!midi.isListed(defaultRoute:midi),"Input-only default route is not an output connection")
+        var statusSensor=first;statusSensor.value=25;statusSensor.receivedAt=now
+        precondition(statusSensor.receptionState(running:false,now:now) == .stopped)
+        precondition(statusSensor.receptionState(running:true,now:now) == .receiving)
+        precondition(statusSensor.receptionState(running:true,now:now.addingTimeInterval(90)) == .stale)
+        statusSensor.receivedAt=nil
+        precondition(statusSensor.receptionState(running:true,now:now) == .waiting,"Saved values must not look live")
         close(midi.mappedValue(1.5,spec:.find("speed"))!,64)
         close(midi.mappedValue(-0.5,spec:.find("hueShift"))!,0)
         close(midi.mappedValue(0.5,spec:.find("hueShift"))!,127)
@@ -57,7 +75,7 @@ import Foundation
         let encoded = OSCEncoder.floatMessage(address:"/x",value:0.5)!
         precondition(Array(encoded) == [47,120,0,0,44,102,0,0,63,0,0,0])
         precondition(OSCEncoder.floatMessage(address:"/x",value:.nan) == nil)
-        print("PASS: simultaneous routes, negative/reversed ranges, independent smoothing, stale/deleted inputs, legacy migration, save/reload, MIDI scaling, OSC wire bytes")
+        print("PASS: simultaneous routes, smoothing, stale/deleted inputs, legacy migration, connection list persistence, sensor states, MIDI scaling, OSC wire bytes")
     }
     static func close(_ a:Double,_ b:Double) {precondition(abs(a-b)<0.000001,"\(a) != \(b)")}
 }
