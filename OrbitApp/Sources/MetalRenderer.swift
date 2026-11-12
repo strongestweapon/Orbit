@@ -92,8 +92,16 @@ final class OrbitRenderer: NSObject, MTKViewDelegate {
             encoder.endEncoding()
             if isOutput || mode == 1 {
                 let output = isOutput; let session = outputSession
+                command.addCompletedHandler { [weak model] completed in
+                    guard completed.status == .completed else { return }
+                    let time = completed.gpuEndTime > 0 ? completed.gpuEndTime : CACurrentMediaTime()
+                    DispatchQueue.main.async { model?.frameRendered(output:output,outputSession:session,at:time) }
+                }
                 drawable.addPresentedHandler { [weak model] _ in
-                    DispatchQueue.main.async { model?.framePresented(output: output, outputSession: session) }
+                    // Some window/compositor configurations return a zero presentedTime.
+                    // Keep presentation liveness independent of the GPU completion meter.
+                    let time = CACurrentMediaTime()
+                    DispatchQueue.main.async { model?.framePresented(output: output, outputSession: session, at:time) }
                 }
             }
             command.present(drawable)

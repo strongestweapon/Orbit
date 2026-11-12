@@ -65,7 +65,8 @@ final class OrbitModel: ObservableObject {
     @Published var outputResolution: OutputResolution = .automatic
     @Published var customOutputWidth: Int = 1920
     @Published var outputStatus = "출력 꺼짐"
-    @Published var fps: Double = 0
+    @Published private(set) var previewFPS: Double?
+    @Published private(set) var outputFPS: Double?
     @Published var textureStatus = "텍스처 준비 중"
     @Published private(set) var parameterValues: [String:Double] = [:]
     @Published var controlOutputEnabled = false {
@@ -84,8 +85,8 @@ final class OrbitModel: ObservableObject {
     private var lastControlTime = CACurrentMediaTime()
     private var outputController: OrbitOutputWindowController?
     private var outputPresentationTime: CFTimeInterval = 0
-    private var frameCount = 0
-    private var fpsTime = CACurrentMediaTime()
+    private var previewRate = FrameRateMeter()
+    private var outputRate = FrameRateMeter()
     private var displayObserver: NSObjectProtocol?
     private var heartbeat: Timer?
     private var saves = Set<AnyCancellable>()
@@ -214,13 +215,16 @@ final class OrbitModel: ObservableObject {
         refreshDisplays()
         displayObserver = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
             object: nil, queue: .main) { [weak self] _ in self?.refreshDisplays() }
-        heartbeat = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+        let presentationTimer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
             guard let self else { return }
             let now = CACurrentMediaTime()
+            self.previewFPS = self.previewRate.framesPerSecond(at:now)
+            self.outputFPS = self.outputOpen ? self.outputRate.framesPerSecond(at:now) : nil
             if self.outputController != nil && now - self.outputPresentationTime > 1 {
                 self.outputActive = false; self.outputStatus = "출력 프레임 대기"
             }
         }
+        RunLoop.main.add(presentationTimer,forMode:.common); heartbeat = presentationTimer
         $settings.dropFirst().debounce(for: .milliseconds(400), scheduler: RunLoop.main).sink { [weak self] _ in self?.save() }.store(in: &saves)
         $sensors.dropFirst().debounce(for: .milliseconds(400), scheduler: RunLoop.main).sink { [weak self] _ in self?.save() }.store(in: &saves)
         $outputResolution.combineLatest($customOutputWidth).dropFirst()
@@ -402,19 +406,24 @@ final class OrbitModel: ObservableObject {
         // Stable 96-byte GPU layout; semantic parameter IDs are packed into their declared slots.
         return [width,height,view,Float(phaseTime)] + names.map { values[$0] ?? 0 }
     }
-    func framePresented(output: Bool, outputSession: UUID? = nil) {
+    func frameRendered(output: Bool, outputSession: UUID? = nil, at time: CFTimeInterval) {
+        if output {
+            guard let controller=outputController, controller.sessionID == outputSession else { return }
+            outputRate.record(completedAt:time)
+        } else {
+            previewRate.record(completedAt:time)
+        }
+    }
+    func framePresented(output: Bool, outputSession: UUID? = nil, at time: CFTimeInterval) {
+        guard time.isFinite, time > 0 else { return }
         if output && outputController?.sessionID != outputSession { return }
         if output && outputController == nil { return }
         // Report the rendered content clock, not a separate wall-clock animation.
         // Pausing or speed zero holds this value along with the shader image.
         if abs(playbackSeconds-phaseTime) >= 0.1 { playbackSeconds = phaseTime }
         if output {
-            outputPresentationTime = CACurrentMediaTime()
+            outputPresentationTime = max(outputPresentationTime,time)
             if outputController != nil && !outputActive { outputActive = true; outputStatus = "LIVE · \(outputName)" }
-        } else {
-            frameCount += 1
-            let now = CACurrentMediaTime()
-            if now - fpsTime > 1 { fps = Double(frameCount) / (now - fpsTime); frameCount = 0; fpsTime = now }
         }
     }
     func refreshDisplays() {
@@ -464,6 +473,7 @@ final class OrbitModel: ObservableObject {
         controller?.shutdown(); clearOutputState()
     }
     private func clearOutputState() {
+        outputRate.reset(); outputFPS = nil; outputPresentationTime = 0
         outputActive = false; outputOpen = false; outputFullscreen = false
         outputRenderSize = .zero; outputScreenName = ""; outputStatus = "출력 꺼짐"
     }

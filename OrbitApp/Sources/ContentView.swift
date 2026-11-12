@@ -25,6 +25,8 @@ struct ContentView: View {
                 HStack(spacing:12) {
                     Text(model.selectedScene?.name ?? "Orbit").font(.system(size:19,weight:.medium))
                     Spacer()
+                    FrameRateReadout(title:"미리보기",value:model.previewFPS,enabled:true,id:"previewFPS")
+                    FrameRateReadout(title:"출력",value:model.outputFPS,enabled:model.outputOpen,id:"outputFPS")
                     if model.selectedScene?.texture != nil {
                         Picker("영상 소스",selection:Binding(get:{model.renderStyle},set:{model.setRenderStyle($0)})) {
                             Text("실시간 생성").tag(0);Text("원본 재생").tag(1)
@@ -177,7 +179,7 @@ struct ContentView: View {
             Spacer()
             Text(model.controlOutputEnabled ? model.controlOutputStatus : model.lastMessage).lineLimit(1)
             Text("v"+(Bundle.main.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String ?? ""))
-            Text("Metal · \(Int(model.fps.rounded())) fps").frame(width:105,alignment:.trailing).monospacedDigit()
+            Text("Metal · 목표 60 FPS").frame(width:105,alignment:.trailing)
         }.font(.system(size:9,design:.monospaced)).foregroundStyle(.secondary).padding(.horizontal,20).frame(height:23).background(orbitPanel)
     }
     private func binding(_ key:String)->Binding<Double> {
@@ -374,6 +376,26 @@ private struct OrbitSettingsPanel: View {
     private func boolBinding(_ key:String)->Binding<Bool> {Binding(get:{model.value(key)>0.5},set:{model.setValue(key,$0 ? 1:0)})}
     private func labeled<V:View>(_ title:String,@ViewBuilder content:()->V)->some View {
         VStack(alignment:.leading,spacing:5){Text(title).font(.system(size:10)).foregroundStyle(.secondary);content()}
+    }
+}
+
+private struct FrameRateReadout: View {
+    let title:String
+    let value:Double?
+    let enabled:Bool
+    let id:String
+    private var number:String { enabled ? value.map {String(format:"%.1f",$0)} ?? "—" : "—" }
+    var body:some View {
+        VStack(alignment:.trailing,spacing:1) {
+            Text(title).font(.system(size:8)).foregroundStyle(.secondary)
+            Text(number+" FPS").font(.system(size:13,weight:.semibold,design:.monospaced))
+                .foregroundStyle(enabled && value != nil ? (value == 0 ? Color.orange : .primary) : .secondary)
+        }.frame(width:92,alignment:.trailing)
+            .accessibilityElement(children:.ignore).accessibilityLabel(title+" "+number+" FPS")
+            .accessibilityIdentifier(id)
+            .help(enabled
+                ? "최근 약 1초간 GPU가 그리기를 완료한 프레임 수입니다. 모니터·LED의 수신 주사율과는 다를 수 있습니다. 일시정지 중에도 화면을 계속 그리므로 FPS는 유지될 수 있습니다."
+                : "출력 시작 후 별도 출력 화면의 FPS를 표시합니다.")
     }
 }
 

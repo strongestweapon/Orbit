@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		01FFF43F1CF4963719A3E7B5 /* FrameRateMeter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8659D41E40CE3E0900595962 /* FrameRateMeter.swift */; };
 		09735A8F04BCFE0F70C37F62 /* textures in Resources */ = {isa = PBXBuildFile; fileRef = CFBAF8129D2DC544A2451FB4 /* textures */; };
 		319E46BB462C32B7629C07A4 /* OrbitTextureSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = B23ACF8A6EDC193ECA1207A0 /* OrbitTextureSource.swift */; };
 		4433AE7905B23E0F53F89077 /* OutputGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68ED161AE146F559867F4590 /* OutputGeometry.swift */; };
@@ -44,6 +45,7 @@
 		698220E0EBB4933D774EE19E /* metal */ = {isa = PBXFileReference; lastKnownFileType = folder; name = metal; path = ../OrbitShaders/metal; sourceTree = SOURCE_ROOT; };
 		75D42149EF4E1E7C3442ACEA /* KakaoTalk_Video_2026-11-10-09-37-08.mp4 */ = {isa = PBXFileReference; path = "KakaoTalk_Video_2026-11-10-09-37-08.mp4"; sourceTree = "<group>"; };
 		7E9691F5740D86839DD72043 /* config */ = {isa = PBXFileReference; lastKnownFileType = folder; name = config; path = ../OrbitShaders/config; sourceTree = SOURCE_ROOT; };
+		8659D41E40CE3E0900595962 /* FrameRateMeter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameRateMeter.swift; sourceTree = "<group>"; };
 		93E43D9E19F5EF7D480B0771 /* Orbit.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Orbit.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB8BB74462AC42160005915D /* OutputWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutputWindowController.swift; sourceTree = "<group>"; };
 		ADFAA53066E70B7AA6CD3986 /* OrbitApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrbitApp.swift; sourceTree = "<group>"; };
@@ -103,6 +105,7 @@
 				F1BBF405377E23759F08F916 /* ConnectionViews.swift */,
 				49871CDB0B18BD84E815765F /* ContentView.swift */,
 				260FEB427A3C3B0643D4E51F /* ControlOutput.swift */,
+				8659D41E40CE3E0900595962 /* FrameRateMeter.swift */,
 				B11E32FED746AE6ED06BF720 /* MetalRenderer.swift */,
 				ADFAA53066E70B7AA6CD3986 /* OrbitApp.swift */,
 				1C8A50C94742D7DA18CF8FB1 /* OrbitModel.swift */,
@@ -197,6 +200,7 @@
 				B11CE072C78508F1B065CCC1 /* ConnectionViews.swift in Sources */,
 				8DC5BD10D27A221949CB860F /* ContentView.swift in Sources */,
 				49CBEE7CE26D0D6B540F5281 /* ControlOutput.swift in Sources */,
+				01FFF43F1CF4963719A3E7B5 /* FrameRateMeter.swift in Sources */,
 				6AD4E83C3CF65EF2EDA5C33C /* MetalRenderer.swift in Sources */,
 				9B98678E642671FB812C13BE /* OSCReceiver.swift in Sources */,
 				C0BC95029586B3FBB9B29D4A /* OrbitApp.swift in Sources */,
@@ -268,7 +272,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -283,7 +287,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.5.1;
+				MARKETING_VERSION = 0.5.2;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -349,7 +353,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -370,7 +374,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.5.1;
+				MARKETING_VERSION = 0.5.2;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
