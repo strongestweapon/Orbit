@@ -50,7 +50,6 @@ final class OrbitModel: ObservableObject {
     @Published var oscRunning = false
     @Published var lastMessage = "OSC 데이터 대기"
     @Published var playing = true { didSet { lastTime = CACurrentMediaTime() } }
-    @Published private(set) var playbackSeconds: Double = 0
     @Published var showReference = false {
         didSet { if showReference { restartPlayback() } else { comparison.stop() } }
     }
@@ -65,8 +64,6 @@ final class OrbitModel: ObservableObject {
     @Published var outputResolution: OutputResolution = .automatic
     @Published var customOutputWidth: Int = 1920
     @Published var outputStatus = "출력 꺼짐"
-    @Published private(set) var previewFPS: Double?
-    @Published private(set) var outputFPS: Double?
     @Published var textureStatus = "텍스처 준비 중"
     @Published private(set) var parameterValues: [String:Double] = [:]
     @Published var controlOutputEnabled = false {
@@ -75,6 +72,7 @@ final class OrbitModel: ObservableObject {
     @Published var controlOutputStatus = "제어 자동 송신 꺼짐"
     @Published private(set) var controlDeliveries: [String:ControlDelivery] = [:]
     let receiver = OSCReceiver()
+    let telemetry = PlaybackTelemetry()
     let controlOutput = ControlOutput()
     let comparison = ComparisonPlayback()
     let textureSource = OrbitGPU.shared.device.map { OrbitTextureSource(device:$0) }
@@ -134,10 +132,6 @@ final class OrbitModel: ObservableObject {
         let original = ParameterRoute.defaults(scene:selectedSceneID,parameter:key,spec:parameterSpec(key)).output
         controlDeliveries.removeValue(forKey:controlEmissionID(key))
         setRoute(key) { $0.output = original }
-    }
-    var playbackTimeLabel: String {
-        let tenths = Int(max(0,playbackSeconds)*10)
-        return String(format:"%02d:%02d.%d",tenths/600,(tenths/10)%60,tenths%10)
     }
     private let textureDefaults: [String: Float] = ["density":0.5,"turbulence":0,"energy":0,
         "hueShift":0,"brightness":1,"coverage":1,"gapSoftness":0.8,"gapMotion":0.25,"fragmentation":0,"rotation":0,
@@ -218,8 +212,8 @@ final class OrbitModel: ObservableObject {
         let presentationTimer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
             guard let self else { return }
             let now = CACurrentMediaTime()
-            self.previewFPS = self.previewRate.framesPerSecond(at:now)
-            self.outputFPS = self.outputOpen ? self.outputRate.framesPerSecond(at:now) : nil
+            self.telemetry.updateFPS(preview:self.previewRate.framesPerSecond(at:now),
+                                     output:self.outputOpen ? self.outputRate.framesPerSecond(at:now) : nil)
             if self.outputController != nil && now - self.outputPresentationTime > 1 {
                 self.outputActive = false; self.outputStatus = "출력 프레임 대기"
             }
@@ -283,7 +277,7 @@ final class OrbitModel: ObservableObject {
     }
     func restartPlayback() {
         phaseTime = 0; lastTime = CACurrentMediaTime()
-        playbackSeconds = 0
+        telemetry.updateTime(0,force:true)
         comparison.invalidatePosition()
     }
     func resetSceneAppearance() {
@@ -420,7 +414,7 @@ final class OrbitModel: ObservableObject {
         if output && outputController == nil { return }
         // Report the rendered content clock, not a separate wall-clock animation.
         // Pausing or speed zero holds this value along with the shader image.
-        if abs(playbackSeconds-phaseTime) >= 0.1 { playbackSeconds = phaseTime }
+        telemetry.updateTime(phaseTime)
         if output {
             outputPresentationTime = max(outputPresentationTime,time)
             if outputController != nil && !outputActive { outputActive = true; outputStatus = "LIVE · \(outputName)" }
@@ -473,7 +467,7 @@ final class OrbitModel: ObservableObject {
         controller?.shutdown(); clearOutputState()
     }
     private func clearOutputState() {
-        outputRate.reset(); outputFPS = nil; outputPresentationTime = 0
+        outputRate.reset(); telemetry.resetOutput(); outputPresentationTime = 0
         outputActive = false; outputOpen = false; outputFullscreen = false
         outputRenderSize = .zero; outputScreenName = ""; outputStatus = "출력 꺼짐"
     }

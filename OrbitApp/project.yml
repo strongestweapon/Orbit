@@ -10,8 +10,8 @@ settings:
     CODE_SIGN_STYLE: Manual
     ENABLE_APP_SANDBOX: NO
     GENERATE_INFOPLIST_FILE: YES
-    MARKETING_VERSION: "0.5.2"
-    CURRENT_PROJECT_VERSION: 9
+    MARKETING_VERSION: "0.5.3"
+    CURRENT_PROJECT_VERSION: 10
 targets:
   Orbit:
     type: application
@@ -44,12 +44,13 @@ targets:
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.graphics-design
         INFOPLIST_KEY_NSLocalNetworkUsageDescription: "현장 센서의 OSC 데이터를 수신합니다."
         INFOPLIST_KEY_NSHumanReadableCopyright: "SUPERLESS"
-    scheme:
-      gatherCoverageData: false
 schemes:
   Orbit:
     build:
       targets:
         Orbit: all
     run:
-      config: Debug
+      config: Release
+      debugEnabled: false
+      enableGPUFrameCaptureMode: disabled
+      enableGPUValidationMode: false

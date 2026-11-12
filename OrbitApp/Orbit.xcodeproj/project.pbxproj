@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		01FFF43F1CF4963719A3E7B5 /* FrameRateMeter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8659D41E40CE3E0900595962 /* FrameRateMeter.swift */; };
+		07EC6C5C2ABA39B54D8AB136 /* PlaybackTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21B98BBD54F51635F802C526 /* PlaybackTelemetry.swift */; };
 		09735A8F04BCFE0F70C37F62 /* textures in Resources */ = {isa = PBXBuildFile; fileRef = CFBAF8129D2DC544A2451FB4 /* textures */; };
 		319E46BB462C32B7629C07A4 /* OrbitTextureSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = B23ACF8A6EDC193ECA1207A0 /* OrbitTextureSource.swift */; };
 		4433AE7905B23E0F53F89077 /* OutputGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68ED161AE146F559867F4590 /* OutputGeometry.swift */; };
@@ -34,6 +35,7 @@
 /* Begin PBXFileReference section */
 		017234CB6B16D3AD70918CEE /* ReferenceVideoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReferenceVideoView.swift; sourceTree = "<group>"; };
 		1C8A50C94742D7DA18CF8FB1 /* OrbitModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrbitModel.swift; sourceTree = "<group>"; };
+		21B98BBD54F51635F802C526 /* PlaybackTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackTelemetry.swift; sourceTree = "<group>"; };
 		260FEB427A3C3B0643D4E51F /* ControlOutput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlOutput.swift; sourceTree = "<group>"; };
 		332AC379A0E28B5E029787A2 /* OrbitLogo.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = OrbitLogo.png; sourceTree = "<group>"; };
 		3A70140ADF511300B34F9BA1 /* golden-drift-reference.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "golden-drift-reference.png"; sourceTree = "<group>"; };
@@ -115,6 +117,7 @@
 				AB8BB74462AC42160005915D /* OutputWindowController.swift */,
 				41FC26EB5348B65B7FDAE675 /* ParameterMappingView.swift */,
 				DD41E236F79EDE0F2637CC5A /* ParameterRouting.swift */,
+				21B98BBD54F51635F802C526 /* PlaybackTelemetry.swift */,
 				017234CB6B16D3AD70918CEE /* ReferenceVideoView.swift */,
 			);
 			path = Sources;
@@ -210,6 +213,7 @@
 				A75402C429AFB995A4186408 /* OutputWindowController.swift in Sources */,
 				49B9F29133ACBBAB25DC3E6D /* ParameterMappingView.swift in Sources */,
 				5B4083000F7E1AE55E9B4ACF /* ParameterRouting.swift in Sources */,
+				07EC6C5C2ABA39B54D8AB136 /* PlaybackTelemetry.swift in Sources */,
 				48822090527C5A268376AE8A /* ReferenceVideoView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -272,7 +276,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 10;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -287,7 +291,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.5.2;
+				MARKETING_VERSION = 0.5.3;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -353,7 +357,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 10;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -374,7 +378,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.5.2;
+				MARKETING_VERSION = 0.5.3;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

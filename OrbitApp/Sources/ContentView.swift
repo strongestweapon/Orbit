@@ -25,8 +25,8 @@ struct ContentView: View {
                 HStack(spacing:12) {
                     Text(model.selectedScene?.name ?? "Orbit").font(.system(size:19,weight:.medium))
                     Spacer()
-                    FrameRateReadout(title:"미리보기",value:model.previewFPS,enabled:true,id:"previewFPS")
-                    FrameRateReadout(title:"출력",value:model.outputFPS,enabled:model.outputOpen,id:"outputFPS")
+                    FrameRateReadout(telemetry:model.telemetry,isOutput:false,enabled:true)
+                    FrameRateReadout(telemetry:model.telemetry,isOutput:true,enabled:model.outputOpen)
                     if model.selectedScene?.texture != nil {
                         Picker("영상 소스",selection:Binding(get:{model.renderStyle},set:{model.setRenderStyle($0)})) {
                             Text("실시간 생성").tag(0);Text("원본 재생").tag(1)
@@ -82,8 +82,7 @@ struct ContentView: View {
                 .help("재생 / 일시정지 · Space")
             Button {model.restartPlayback()} label:{Image(systemName:"backward.end.fill")}.help("처음부터")
             Text(model.playing ? "PLAYING" : "PAUSED").font(.system(size:9,design:.monospaced)).foregroundStyle(.secondary)
-            Text(model.playbackTimeLabel).font(.system(size:11,design:.monospaced)).monospacedDigit()
-                .frame(width:76,alignment:.leading).accessibilityIdentifier("playbackTime")
+            PlaybackTimeReadout(telemetry:model.telemetry)
             Spacer()
             Circle().fill(model.outputActive ? .red : .gray).frame(width:7,height:7)
             Text(model.outputStatus).font(.system(size:10)).lineLimit(1)
@@ -379,11 +378,21 @@ private struct OrbitSettingsPanel: View {
     }
 }
 
+private struct PlaybackTimeReadout: View {
+    @ObservedObject var telemetry: PlaybackTelemetry
+    var body:some View {
+        Text(telemetry.timeLabel).font(.system(size:11,design:.monospaced)).monospacedDigit()
+            .frame(width:76,alignment:.leading).accessibilityIdentifier("playbackTime")
+    }
+}
+
 private struct FrameRateReadout: View {
-    let title:String
-    let value:Double?
+    @ObservedObject var telemetry: PlaybackTelemetry
+    let isOutput:Bool
     let enabled:Bool
-    let id:String
+    private var title:String { isOutput ? "출력" : "미리보기" }
+    private var value:Double? { isOutput ? telemetry.outputFPS : telemetry.previewFPS }
+    private var id:String { isOutput ? "outputFPS" : "previewFPS" }
     private var number:String { enabled ? value.map {String(format:"%.1f",$0)} ?? "—" : "—" }
     var body:some View {
         VStack(alignment:.trailing,spacing:1) {
