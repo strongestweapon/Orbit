@@ -5,10 +5,10 @@ private let orbitPanel = Color(white:0.085)
 private let orbitBrandImage = Bundle.main.url(forResource:"OrbitLogo",withExtension:"png")
     .flatMap { NSImage(contentsOf:$0) }
 private enum OrbitPanel: String, Identifiable {
-    case look, sensors, output
+    case look, sensors, output, performance
     var id: String { rawValue }
     var title: String {
-        switch self { case .look:return "공통 조절";case .sensors:return "센서 입력";case .output:return "출력 설정" }
+        switch self { case .look:return "공통 조절";case .sensors:return "센서 입력";case .output:return "출력 설정";case .performance:return "FPS · 성능" }
     }
 }
 
@@ -27,6 +27,8 @@ struct ContentView: View {
                     Spacer()
                     FrameRateReadout(telemetry:model.telemetry,isOutput:false,enabled:true)
                     FrameRateReadout(telemetry:model.telemetry,isOutput:true,enabled:model.outputOpen)
+                    Button { panel = .performance } label: { Image(systemName:"speedometer") }
+                        .help("FPS 제한 / 최대 성능 측정").accessibilityLabel("FPS 성능 설정").accessibilityIdentifier("openPerformance")
                     if model.selectedScene?.texture != nil {
                         Picker("영상 소스",selection:Binding(get:{model.renderStyle},set:{model.setRenderStyle($0)})) {
                             Text("실시간 생성").tag(0);Text("원본 재생").tag(1)
@@ -59,7 +61,11 @@ struct ContentView: View {
         }
         .background(Color(white:0.045)).tint(orbitAccent)
         .sheet(item:$panel) { selected in
-            OrbitSettingsPanel(model:model,panel:selected,initialSensorID:$initialSensorID) { panel=nil }
+            if selected == .performance {
+                PerformanceView(model:model,measurement:model.performance) { panel=nil }
+            } else {
+                OrbitSettingsPanel(model:model,panel:selected,initialSensorID:$initialSensorID) { panel=nil }
+            }
         }
         .alert("Orbit",isPresented:Binding(get:{model.errorMessage != nil},set:{if !$0 {model.errorMessage=nil}})) {
             Button("확인",role:.cancel){model.errorMessage=nil}
@@ -178,7 +184,7 @@ struct ContentView: View {
             Spacer()
             Text(model.controlOutputEnabled ? model.controlOutputStatus : model.lastMessage).lineLimit(1)
             Text("v"+(Bundle.main.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String ?? ""))
-            Text("Metal · 목표 60 FPS").frame(width:105,alignment:.trailing)
+            Text("Metal · "+model.frameRate.label).frame(width:105,alignment:.trailing)
         }.font(.system(size:9,design:.monospaced)).foregroundStyle(.secondary).padding(.horizontal,20).frame(height:23).background(orbitPanel)
     }
     private func binding(_ key:String)->Binding<Double> {
@@ -203,7 +209,7 @@ private struct OrbitSettingsPanel: View {
                 .padding(20)
             Divider()
             Group {
-                switch panel {case .look:look;case .sensors:sensors;case .output:output}
+                switch panel {case .look:look;case .sensors:sensors;case .output:output;case .performance:EmptyView()}
             }.padding(20).frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.topLeading)
             Divider()
             HStack {

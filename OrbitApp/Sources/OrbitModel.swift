@@ -50,6 +50,7 @@ final class OrbitModel: ObservableObject {
     @Published var oscRunning = false
     @Published var lastMessage = "OSC 데이터 대기"
     @Published var playing = true { didSet { lastTime = CACurrentMediaTime() } }
+    @Published var frameRate: PlaybackFrameRate = .sixty
     @Published var showReference = false {
         didSet { if showReference { restartPlayback() } else { comparison.stop() } }
     }
@@ -73,6 +74,8 @@ final class OrbitModel: ObservableObject {
     @Published private(set) var controlDeliveries: [String:ControlDelivery] = [:]
     let receiver = OSCReceiver()
     let telemetry = PlaybackTelemetry()
+    let performance = PerformanceMeasurement()
+    private var previewSurfaces: [Float:BenchmarkSurface] = [:]
     let controlOutput = ControlOutput()
     let comparison = ComparisonPlayback()
     let textureSource = OrbitGPU.shared.device.map { OrbitTextureSource(device:$0) }
@@ -375,6 +378,32 @@ final class OrbitModel: ObservableObject {
     }
     func stopOSC() { receiver.stop(); oscRunning = false; oscState = "수신 꺼짐" }
 
+    func registerPreview(mode: Float, size: CGSize) {
+        let width=Int(size.width),height=Int(size.height)
+        guard width > 0, height > 0 else { return }
+        if let current=previewSurfaces[mode],current.width==width,current.height==height { return }
+        previewSurfaces[mode] = BenchmarkSurface(name:mode == 1 ? "링" : (mode == 0 ? "펼친 영상" : "출력 미리보기"),
+                                                width:width,height:height,mode:mode)
+    }
+    func startBenchmark(resolution: OutputResolution, includePreviews: Bool) {
+        guard !performance.isRunning, !outputOpen, !usesTexture, let scene=selectedScene,
+              let device=OrbitGPU.shared.device else { return }
+        do {
+            let size=resolution.size(availablePixels:.zero,customWidth:3840)
+            var surfaces=[BenchmarkSurface(name:"출력",width:Int(size.width),height:Int(size.height),mode:2)]
+            if includePreviews { surfaces += previewSurfaces.sorted {$0.key<$1.key}.map(\.value) }
+            let request=BenchmarkRequest(sceneName:scene.name,device:device,pipeline:try OrbitGPU.shared.pipeline(for:scene),
+                surfaces:surfaces,uniforms:uniforms(width:Float(size.width),height:Float(size.height),view:2),
+                speed:playing ? playbackSpeed : 0)
+            comparison.stop()
+            performance.start(request) { [weak self] in
+                guard let self else { return }
+                self.lastTime=CACurrentMediaTime(); self.previewRate.reset()
+                self.telemetry.updateFPS(preview:nil,output:nil)
+            }
+        } catch { performance.failed(error.localizedDescription) }
+    }
+
     func uniforms(width: Float, height: Float, view: Float) -> [Float] {
         // A shared monotonic clock for every preview and output. Rendering delays must not slow time.
         let now = CACurrentMediaTime(); let delta = max(0, now - lastTime); lastTime = now
@@ -432,6 +461,7 @@ final class OrbitModel: ObservableObject {
         }
     }
     func startOutput() {
+        guard !performance.isRunning else { return }
         stopOutput()
         let currentScreen = NSApp.keyWindow?.screen ?? NSApp.mainWindow?.screen ?? NSScreen.main
         let screen = selectedDisplayID == 0 ? currentScreen : NSScreen.screens.first(where: {

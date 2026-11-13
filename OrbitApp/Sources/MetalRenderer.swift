@@ -41,7 +41,7 @@ struct OrbitMetalView: NSViewRepresentable {
         view.colorPixelFormat = .bgra8Unorm
         view.colorspace = CGColorSpace(name: CGColorSpace.sRGB)
         view.clearColor = MTLClearColorMake(0, 0, 0, 1)
-        view.preferredFramesPerSecond = 60
+        view.preferredFramesPerSecond = model.frameRate.target(screenMaximum:NSScreen.main?.maximumFramesPerSecond ?? 60)
         view.framebufferOnly = true
         view.enableSetNeedsDisplay = false
         let renderer = OrbitRenderer(model: model, mode: mode, isOutput: isOutput, outputSession: outputSession)
@@ -67,8 +67,12 @@ final class OrbitRenderer: NSObject, MTKViewDelegate {
     }
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
     func draw(in view: MTKView) {
+        guard let model, !model.performance.isRunning else { return }
+        let target=model.frameRate.target(screenMaximum:view.window?.screen?.maximumFramesPerSecond ?? 60)
+        if view.preferredFramesPerSecond != target { view.preferredFramesPerSecond = target }
+        if !isOutput { model.registerPreview(mode:mode,size:view.drawableSize) }
         guard view.drawableSize.width > 0, view.drawableSize.height > 0,
-              let model, let scene = model.selectedScene, failedScene != scene.id,
+              let scene = model.selectedScene, failedScene != scene.id,
               let descriptor = view.currentRenderPassDescriptor, let drawable = view.currentDrawable,
               let command = OrbitGPU.shared.queue?.makeCommandBuffer() else { return }
         do {
