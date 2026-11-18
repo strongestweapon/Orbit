@@ -181,6 +181,21 @@ def package(args):
         print('TEST ONLY. Not eligible for publishing or the production update feed.')
 
 
+def publish_assets(folder, tag, commit):
+    releases = json.loads(run('gh', 'release', 'list', '--repo', REPO, '--limit', '100',
+                             '--json', 'tagName,isDraft', capture=True))
+    existing = next((release for release in releases if release['tagName'] == tag), None)
+    if existing and not existing['isDraft']:
+        raise RuntimeError(f'Refusing to replace published release: {tag}')
+    if existing is None:
+        run('gh', 'release', 'create', tag, '--repo', REPO, '--target', commit, '--draft')
+    # Keep the release private until every verified artifact has uploaded.
+    run('gh', 'release', 'upload', tag, *sorted(folder.iterdir()), '--repo', REPO, '--clobber')
+    run('gh', 'release', 'edit', tag, '--repo', REPO, '--target', commit,
+        '--title', 'Orbit ' + tag.removeprefix('v'), '--notes-file', folder / 'ReleaseNotes.txt',
+        '--draft=false', '--latest')
+
+
 def publish(args):
     folder = args.directory.resolve()
     data = json.loads((folder / 'release.json').read_text())
@@ -199,8 +214,7 @@ def publish(args):
     if not run('git', 'ls-remote', 'origin', 'refs/heads/main', capture=True).startswith(commit):
         raise RuntimeError('Push the release commit to main before publishing')
     tag = 'v' + data['version']
-    run('gh', 'release', 'create', tag, *sorted(folder.iterdir()), '--repo', REPO,
-        '--target', commit, '--title', 'Orbit ' + data['version'], '--notes-file', folder / 'ReleaseNotes.txt')
+    publish_assets(folder, tag, commit)
     # Publish the feed only after every release asset is available.
     shutil.copyfile(folder / 'appcast.xml', ROOT / 'updates/appcast.xml')
     run('git', 'add', 'updates/appcast.xml')

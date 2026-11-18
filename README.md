@@ -45,6 +45,8 @@ python3 OrbitApp/Tools/release.py publish Releases/0.6.0
 
 공증 전 내부 테스트만 하려면 `package --app <서명된 앱 경로> --allow-unnotarized`를 사용합니다. 파일과 폴더에 `TEST`가 표시되며 `publish`는 이를 거부합니다. TEST 패키지 안의 appcast는 시험용으로만 보관하고 `updates/appcast.xml`에 복사하지 마세요.
 
+GitHub 릴리스 초안을 미리 만들어도 됩니다. `publish`는 기존 초안을 이어 사용하고, 검증된 파일을 모두 업로드한 뒤 공개합니다. 이미 공개된 같은 버전은 덮어쓰지 않습니다.
+
 업데이트 비밀키는 Mac 키체인의 Sparkle 계정 `studio.superless.Orbit`에 보관합니다. 저장소에는 공개키만 포함됩니다. 다른 빌드 Mac을 사용할 때는 기존 비밀키를 안전하게 이전해야 하며, 새 키를 임의로 생성해 교체하면 이미 설치된 앱이 다음 업데이트를 검증할 수 없습니다.
 
 설치 보류 검증:
