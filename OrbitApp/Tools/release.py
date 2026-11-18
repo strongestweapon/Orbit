@@ -22,6 +22,7 @@ IDENTITY = 'Developer ID Application: SUPERLESS Inc. (M38GX6QKSQ)'
 ACCOUNT = 'studio.superless.Orbit'
 SPARKLE_VERSION = '2.10.1'
 FEED = f'https://raw.githubusercontent.com/{REPO}/main/updates/appcast.xml'
+NOTARY_PROFILE = 'OrbitNotary'
 
 
 def run(*args, capture=False):
@@ -111,6 +112,23 @@ def notarize(args):
             time.sleep(30)
 
 
+def notarize_file(path, profile):
+    print('Submitting distribution file for notarization:', path.name, flush=True)
+    result = json.loads(run('xcrun', 'notarytool', 'submit', path,
+                            '--keychain-profile', profile, '--wait', '--timeout', '20m',
+                            '--output-format', 'json', capture=True))
+    if result.get('status') != 'Accepted':
+        raise RuntimeError(f"Apple rejected the distribution: {result.get('status')} (submission {result.get('id')})")
+    run('xcrun', 'stapler', 'staple', path)
+    return result['id']
+
+
+def verify_dmg(path):
+    run('codesign', '--verify', '--strict', path)
+    run('xcrun', 'stapler', 'validate', path)
+    run('spctl', '--assess', '--type', 'open', '--context', 'context:primary-signature', path)
+
+
 def package(args):
     source = args.app.resolve()
     info = app_info(source)
@@ -157,6 +175,11 @@ def package(args):
             '-fs', 'HFS+', '-format', 'UDZO', '-nospotlight', dmg_path)
         run('codesign', '--sign', IDENTITY, '--timestamp', dmg_path)
         run('hdiutil', 'verify', dmg_path)
+        dmg_submission = None
+        if notarized:
+            # App notarization does not notarize its enclosing disk image.
+            dmg_submission = notarize_file(dmg_path, args.notary_profile)
+            verify_dmg(dmg_path)
         feed_work = stage / 'feed'
         feed_work.mkdir()
         shutil.copyfile(zip_path, feed_work / zip_path.name)
@@ -169,6 +192,8 @@ def package(args):
         shutil.copyfile(feed_work / 'appcast.xml', artifacts / 'appcast.xml')
         shutil.copyfile(notes, artifacts / 'ReleaseNotes.txt')
         metadata = {'version': version, 'build': info['CFBundleVersion'], 'notarized': notarized,
+                    'app_notarized': notarized, 'dmg_notarized': dmg_submission is not None,
+                    'dmg_submission': dmg_submission,
                     'source_commit': run('git', 'rev-parse', 'HEAD', capture=True),
                     'files': {p.name: digest(p) for p in artifacts.iterdir()}}
         (artifacts / 'release.json').write_text(json.dumps(metadata, indent=2) + '\n')
@@ -204,6 +229,10 @@ def publish(args):
     for name, expected in data['files'].items():
         if digest(folder / name) != expected:
             raise RuntimeError(f'Release file changed: {name}')
+    disk_images = list(folder.glob('*.dmg'))
+    if len(disk_images) != 1:
+        raise RuntimeError('The release must contain exactly one signed and notarized DMG')
+    verify_dmg(disk_images[0])
     sparkle = tools(args.sparkle_tools)
     run(sparkle / 'sign_update', '--account', ACCOUNT, '--verify', folder / 'appcast.xml')
     run('git', 'diff', '--exit-code')
@@ -232,6 +261,8 @@ def main():
     package_parser = sub.add_parser('package')
     package_parser.add_argument('--app', type=Path, required=True)
     package_parser.add_argument('--sparkle-tools', type=Path)
+    package_parser.add_argument('--notary-profile', default=NOTARY_PROFILE,
+                                help='Saved notarytool Keychain profile (default: OrbitNotary)')
     package_parser.add_argument('--allow-unnotarized', action='store_true')
     publish_parser = sub.add_parser('publish')
     publish_parser.add_argument('directory', type=Path)

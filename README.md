@@ -32,6 +32,14 @@ Sparkle 2.10.1을 사용합니다. 기본 설정은 실행 시 자동 확인·�
 
 ### 다음 버전 배포
 
+최초 한 번, 공증에 사용하는 Apple 계정의 **앱 전용 암호**를 Mac 키체인에 등록합니다. 아래 명령은 암호를 화면에 표시하지 않는 입력 창으로 받습니다. Apple 계정의 일반 로그인 암호가 아니라 앱 전용 암호를 입력하세요. 암호를 코드·명령 인자·GitHub에 기록하지 않습니다.
+
+```sh
+xcrun notarytool store-credentials OrbitNotary --apple-id super@superless.ai --team-id M38GX6QKSQ
+```
+
+`OrbitNotary`를 등록한 뒤에는 DMG 공증에 이 인증을 자동으로 사용합니다. 등록 여부는 `xcrun notarytool history --keychain-profile OrbitNotary`로 확인할 수 있습니다. 인증이 취소되거나 Apple 계정 암호 변경으로 앱 전용 암호가 무효화되면 다시 등록해야 합니다.
+
 `OrbitApp/project.yml`의 버전과 빌드 번호를 증가시키고 `updates/<버전>.txt`에 릴리스 노트를 작성합니다. 아래 경로의 버전은 실제 버전에 맞춥니다. `build` 후 생성된 프로젝트 변경까지 검증하고 커밋·푸시한 뒤 패키징합니다.
 
 ```sh
@@ -41,7 +49,9 @@ python3 OrbitApp/Tools/release.py package --app .build/release-0.6.0/notarized/O
 python3 OrbitApp/Tools/release.py publish Releases/0.6.0
 ```
 
-`notarize`는 Xcode에 로그인된 유효한 SUPERLESS 개발자 계정으로 Apple에 제출합니다. `package`는 공증 티켓을 확인한 앱으로 DMG와 업데이트 ZIP, 서명된 목록, 체크섬을 만듭니다. `publish`는 릴리스 파일을 올린 다음 서명된 목록을 갱신·푸시합니다. 패키징 시 기록한 소스 커밋이 현재 커밋 또는 GitHub main과 다르면 게시하지 않습니다. 빌드 후 앱 소스가 바뀌었다면 먼저 다시 빌드해야 합니다.
+`notarize`는 Xcode에 로그인된 유효한 SUPERLESS 개발자 계정으로 앱을 Apple에 제출합니다. `package`는 공증된 앱으로 ZIP과 DMG를 만든 뒤, 키체인의 인증으로 **DMG 자체도 공증**하고 티켓을 부착합니다. 앱 공증만으로는 DMG 공증이 완료되지 않습니다. DMG 공증·실행 허용 검증을 통과한 뒤 업데이트 목록과 체크섬을 생성합니다. 다른 키체인 프로필을 쓰려면 `package --notary-profile <이름>`을 지정하세요.
+
+`publish`는 파일 해시와 DMG 공증을 다시 확인하고 릴리스 파일을 올린 다음 서명된 목록을 갱신·푸시합니다. 패키징 시 기록한 소스 커밋이 현재 커밋 또는 GitHub main과 다르면 게시하지 않습니다. 빌드 후 앱 소스가 바뀌었다면 먼저 다시 빌드해야 합니다.
 
 공증 전 내부 테스트만 하려면 `package --app <서명된 앱 경로> --allow-unnotarized`를 사용합니다. 파일과 폴더에 `TEST`가 표시되며 `publish`는 이를 거부합니다. TEST 패키지 안의 appcast는 시험용으로만 보관하고 `updates/appcast.xml`에 복사하지 마세요.
 
