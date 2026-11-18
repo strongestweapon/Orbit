@@ -129,6 +129,10 @@ def verify_dmg(path):
     run('spctl', '--assess', '--type', 'open', '--context', 'context:primary-signature', path)
 
 
+def verify_update(feed, archive, public_key):
+    run('xcrun', 'swift', ROOT / 'OrbitApp/Tools/verify_update.swift', feed, archive, public_key)
+
+
 def package(args):
     source = args.app.resolve()
     info = app_info(source)
@@ -147,9 +151,6 @@ def package(args):
     if output.exists():
         raise RuntimeError(f'Refusing to overwrite existing release: {output}')
     sparkle = tools(args.sparkle_tools)
-    public_key = run(sparkle / 'generate_keys', '--account', ACCOUNT, '-p', capture=True)
-    if public_key != info['SUPublicEDKey']:
-        raise RuntimeError('Keychain update signing key does not match the app')
     notes = ROOT / 'updates' / (version + '.txt')
     if not notes.is_file():
         raise RuntimeError(f'Add release notes: {notes}')
@@ -168,8 +169,6 @@ def package(args):
         artifacts = stage / 'artifacts'
         artifacts.mkdir()
         base = f'Orbit-{version}-macOS-universal{suffix}'
-        zip_path = artifacts / (base + '.zip')
-        run('ditto', '-c', '-k', '--norsrc', '--noextattr', '--keepParent', app, zip_path)
         dmg_path = artifacts / (base + '.dmg')
         run('hdiutil', 'create', '-volname', f'Orbit {version}{suffix}', '-srcfolder', dmg_contents,
             '-fs', 'HFS+', '-format', 'UDZO', '-nospotlight', dmg_path)
@@ -182,13 +181,13 @@ def package(args):
             verify_dmg(dmg_path)
         feed_work = stage / 'feed'
         feed_work.mkdir()
-        shutil.copyfile(zip_path, feed_work / zip_path.name)
+        shutil.copyfile(dmg_path, feed_work / dmg_path.name)
         shutil.copyfile(ROOT / 'updates/appcast.xml', feed_work / 'appcast.xml')
-        shutil.copyfile(notes, feed_work / (zip_path.stem + '.txt'))
+        shutil.copyfile(notes, feed_work / (dmg_path.stem + '.txt'))
         run(sparkle / 'generate_appcast', '--account', ACCOUNT, '--maximum-deltas', '0',
             '--download-url-prefix', f'https://github.com/{REPO}/releases/download/v{version}/',
             '--embed-release-notes', feed_work)
-        run(sparkle / 'sign_update', '--account', ACCOUNT, '--verify', feed_work / 'appcast.xml')
+        verify_update(feed_work / 'appcast.xml', dmg_path, info['SUPublicEDKey'])
         shutil.copyfile(feed_work / 'appcast.xml', artifacts / 'appcast.xml')
         shutil.copyfile(notes, artifacts / 'ReleaseNotes.txt')
         metadata = {'version': version, 'build': info['CFBundleVersion'], 'notarized': notarized,
@@ -207,6 +206,12 @@ def package(args):
 
 
 def publish_assets(folder, tag, commit):
+    disk_images = list(folder.glob('*.dmg'))
+    if len(disk_images) != 1:
+        raise RuntimeError('The release must contain exactly one DMG')
+    notes = folder / 'ReleaseNotes.txt'
+    if not notes.is_file():
+        raise RuntimeError('Release notes are required')
     releases = json.loads(run('gh', 'release', 'list', '--repo', REPO, '--limit', '100',
                              '--json', 'tagName,isDraft', capture=True))
     existing = next((release for release in releases if release['tagName'] == tag), None)
@@ -214,8 +219,10 @@ def publish_assets(folder, tag, commit):
         raise RuntimeError(f'Refusing to replace published release: {tag}')
     if existing is None:
         run('gh', 'release', 'create', tag, '--repo', REPO, '--target', commit, '--draft')
-    # Keep the release private until every verified artifact has uploaded.
-    run('gh', 'release', 'upload', tag, *sorted(folder.iterdir()), '--repo', REPO, '--clobber')
+    # The DMG is shared by manual installation and Sparkle updates. Keep the
+    # release notes available; signing/audit files remain in the repository or
+    # local release folder rather than the public download list.
+    run('gh', 'release', 'upload', tag, disk_images[0], notes, '--repo', REPO, '--clobber')
     run('gh', 'release', 'edit', tag, '--repo', REPO, '--target', commit,
         '--title', 'Orbit ' + tag.removeprefix('v'), '--notes-file', folder / 'ReleaseNotes.txt',
         '--draft=false', '--latest')
@@ -233,8 +240,8 @@ def publish(args):
     if len(disk_images) != 1:
         raise RuntimeError('The release must contain exactly one signed and notarized DMG')
     verify_dmg(disk_images[0])
-    sparkle = tools(args.sparkle_tools)
-    run(sparkle / 'sign_update', '--account', ACCOUNT, '--verify', folder / 'appcast.xml')
+    public_key = plistlib.loads((ROOT / 'OrbitApp/Info.plist').read_bytes())['SUPublicEDKey']
+    verify_update(folder / 'appcast.xml', disk_images[0], public_key)
     run('git', 'diff', '--exit-code')
     run('git', 'diff', '--cached', '--exit-code')
     commit = run('git', 'rev-parse', 'HEAD', capture=True)

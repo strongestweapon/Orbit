@@ -28,6 +28,7 @@ Sparkle 2.10.1을 사용합니다. 기본 설정은 실행 시 자동 확인·�
 - 재시작 직전에 씬 조절값과 센서·출력 매핑을 저장합니다. 설정은 앱 외부의 기존 사용자 설정 영역에 보존됩니다.
 - 다운로드 전 업데이트 목록의 Ed25519 서명, 압축 해제 전 업데이트 파일의 서명을 검증합니다. 배포 앱은 SUPERLESS Developer ID로 서명합니다.
 - 업데이트 목록은 `updates/appcast.xml`, 실행 파일은 GitHub Releases에 둡니다. 아직 공증한 정식 릴리스가 없으면 목록은 비어 있습니다. 공증 전 TEST 패키지는 정식 업데이트로 배포하지 않습니다.
+- GitHub 릴리스에는 설명 본문과 DMG·ReleaseNotes.txt 두 첨부만 공개합니다. 수동 설치와 자동 업데이트가 같은 DMG를 사용합니다. 서명된 목록은 저장소에서 제공하고, 체크섬·배포 기록은 로컬에 보관합니다.
 - 0.5.4 이하에는 업데이트 기능이 없으므로 0.6.0 이상을 한 번 수동 설치해야 합니다. DMG 안에서 직접 실행하지 말고 Applications에 복사하세요.
 
 ### 다음 버전 배포
@@ -49,7 +50,7 @@ python3 OrbitApp/Tools/release.py package --app .build/release-0.6.0/notarized/O
 python3 OrbitApp/Tools/release.py publish Releases/0.6.0
 ```
 
-`notarize`는 Xcode에 로그인된 유효한 SUPERLESS 개발자 계정으로 앱을 Apple에 제출합니다. `package`는 공증된 앱으로 ZIP과 DMG를 만든 뒤, 키체인의 인증으로 **DMG 자체도 공증**하고 티켓을 부착합니다. 앱 공증만으로는 DMG 공증이 완료되지 않습니다. DMG 공증·실행 허용 검증을 통과한 뒤 업데이트 목록과 체크섬을 생성합니다. 다른 키체인 프로필을 쓰려면 `package --notary-profile <이름>`을 지정하세요.
+`notarize`는 Xcode에 로그인된 유효한 SUPERLESS 개발자 계정으로 앱을 Apple에 제출합니다. `package`는 공증된 앱으로 DMG를 만든 뒤, 키체인의 인증으로 **DMG 자체도 공증**하고 티켓을 부착합니다. 앱 공증만으로는 DMG 공증이 완료되지 않습니다. DMG 공증·실행 허용 검증을 통과한 뒤 이 DMG를 가리키는 업데이트 목록과 체크섬을 생성합니다. 다른 키체인 프로필을 쓰려면 `package --notary-profile <이름>`을 지정하세요.
 
 `publish`는 파일 해시와 DMG 공증을 다시 확인하고 릴리스 파일을 올린 다음 서명된 목록을 갱신·푸시합니다. 패키징 시 기록한 소스 커밋이 현재 커밋 또는 GitHub main과 다르면 게시하지 않습니다. 빌드 후 앱 소스가 바뀌었다면 먼저 다시 빌드해야 합니다.
 
@@ -58,6 +59,8 @@ python3 OrbitApp/Tools/release.py publish Releases/0.6.0
 GitHub 릴리스 초안을 미리 만들어도 됩니다. `publish`는 기존 초안을 이어 사용하고, 검증된 파일을 모두 업로드한 뒤 공개합니다. 이미 공개된 같은 버전은 덮어쓰지 않습니다.
 
 업데이트 비밀키는 Mac 키체인의 Sparkle 계정 `studio.superless.Orbit`에 보관합니다. 저장소에는 공개키만 포함됩니다. 다른 빌드 Mac을 사용할 때는 기존 비밀키를 안전하게 이전해야 하며, 새 키를 임의로 생성해 교체하면 이미 설치된 앱이 다음 업데이트를 검증할 수 없습니다.
+
+목록·DMG 서명 검증은 `OrbitApp/Tools/verify_update.swift`에서 공개키만 사용합니다. 서명을 새로 생성할 때만 비밀키가 필요하며, 검증 단계는 키체인 접근을 요청하지 않습니다.
 
 설치 보류 검증:
 

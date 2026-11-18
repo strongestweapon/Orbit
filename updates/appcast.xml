@@ -1,8 +1,6 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?>
-<!-- sparkle-sign-warning:
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
--->
-<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
     <channel>
         <title>Orbit Updates</title>
         <link>https://github.com/strongestweapon/Orbit/releases</link>
@@ -10,7 +8,7 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <language>ko</language>
         <item>
             <title>0.6.0</title>
-            <pubDate>Wed, 18 Nov 2026 18:33:15 +0900</pubDate>
+            <pubDate>Wed, 18 Nov 2026 18:49:34 +0900</pubDate>
             <sparkle:version>13</sparkle:version>
             <sparkle:shortVersionString>0.6.0</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
@@ -26,11 +24,10 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
 0.5.4 이하 사용자는 이 버전을 한 번 수동 설치해야 합니다.
 이후에는 앱 안에서 업데이트됩니다.
 ]]></description>
-            <enclosure url="https://github.com/strongestweapon/Orbit/releases/download/v0.6.0/Orbit-0.6.0-macOS-universal.zip" length="67474940" type="application/octet-stream" sparkle:edSignature="mu59OUyJdvxEuNZe8O3V9sGEbYafGAmJfGff7cz4/N+KUg9LNm4o3x3XhVOlkpWxr+9wDQB7o+BR3PYQ9nLoCg=="/>
+            <enclosure url="https://github.com/strongestweapon/Orbit/releases/download/v0.6.0/Orbit-0.6.0-macOS-universal.dmg" length="68736537" type="application/octet-stream" sparkle:edSignature="LwZpcBLKRfikpbm5HDg9aXOS+epA9oJU2tnzWfnnmXkDYSipRNnj55f/wRfHs+wfuY04EgG8yLX9maI2lVbPBw=="></enclosure>
         </item>
     </channel>
-</rss>
-<!-- sparkle-signatures:
-edSignature: 0YX1NlamwG0PQxHsHSEmiNWHR/Q6XDNfwXZMS32dTJP6o/2spNTUL0hrefv4as/YGch8bCE92dPVpRtioYFOAw==
-length: 1986
+</rss><!-- sparkle-signatures:
+edSignature: LilbjstZFHm8iin8s0uGRuJyG+TH+w8YC+PdG2KIvidY8WVOf7O/MdMSqgNKhesDegAJyNy/sC9E6WY+h3T+CA==
+length: 1994
 -->
