@@ -18,7 +18,43 @@
 - 공통 조절·센서·매핑·출력 설정 팝업
 - 비교용 원본 영상 및 추출 띠 텍스처 재생
 
-기본 영상 소스인 **실시간 생성**은 이미지/영상 텍스처 없이 씬별 코드로 계산합니다. **원본 재생**을 선택하면 번들에 포함된 추출 리소스를 사용합니다. MIDI CC 및 OSC 제어 송신은 구현되어 있으며, Live에서 제어할 대상은 MIDI Map 또는 별도 OSC 수신 장치에 연결합니다. 자동 업데이트는 아직 구현하지 않았습니다.
+기본 영상 소스인 **실시간 생성**은 이미지/영상 텍스처 없이 씬별 코드로 계산합니다. **원본 재생**을 선택하면 번들에 포함된 추출 리소스를 사용합니다. MIDI CC 및 OSC 제어 송신은 구현되어 있으며, Live에서 제어할 대상은 MIDI Map 또는 별도 OSC 수신 장치에 연결합니다. 0.6.0부터 GitHub의 서명된 업데이트 목록을 실행할 때마다 확인하고 자동 업데이트합니다.
+
+## 자동 업데이트 (0.6.0)
+
+Sparkle 2.10.1을 사용합니다. 기본 설정은 실행 시 자동 확인·자동 다운로드·자동 설치입니다. 새 업데이트가 없거나 네트워크/서명 검증에 실패해도 기존 앱은 계속 작동합니다. 앱 메뉴의 **업데이트 확인…**과 하단 업데이트 메뉴에서 상태와 마지막 확인 시각을 볼 수 있습니다.
+
+- 영상 출력 창이 열려 있거나 MIDI/OSC 제어 송신 또는 GPU 성능 측정 중이면 설치·재시작을 보류합니다. 모두 종료되면 자동으로 진행합니다.
+- 재시작 직전에 씬 조절값과 센서·출력 매핑을 저장합니다. 설정은 앱 외부의 기존 사용자 설정 영역에 보존됩니다.
+- 다운로드 전 업데이트 목록의 Ed25519 서명, 압축 해제 전 업데이트 파일의 서명을 검증합니다. 배포 앱은 SUPERLESS Developer ID로 서명합니다.
+- 업데이트 목록은 `updates/appcast.xml`, 실행 파일은 GitHub Releases에 둡니다. 아직 공증한 정식 릴리스가 없으면 목록은 비어 있습니다. 공증 전 TEST 패키지는 정식 업데이트로 배포하지 않습니다.
+- 0.5.4 이하에는 업데이트 기능이 없으므로 0.6.0 이상을 한 번 수동 설치해야 합니다. DMG 안에서 직접 실행하지 말고 Applications에 복사하세요.
+
+### 다음 버전 배포
+
+`OrbitApp/project.yml`의 버전과 빌드 번호를 증가시키고 `updates/<버전>.txt`에 릴리스 노트를 작성합니다. 아래 경로의 버전은 실제 버전에 맞춥니다. `build` 후 생성된 프로젝트 변경까지 검증하고 커밋·푸시한 뒤 패키징합니다.
+
+```sh
+python3 OrbitApp/Tools/release.py build
+python3 OrbitApp/Tools/release.py notarize --archive .build/release-0.6.0/Orbit.xcarchive
+python3 OrbitApp/Tools/release.py package --app .build/release-0.6.0/notarized/Orbit.app
+python3 OrbitApp/Tools/release.py publish Releases/0.6.0
+```
+
+`notarize`는 Xcode에 로그인된 유효한 SUPERLESS 개발자 계정으로 Apple에 제출합니다. `package`는 공증 티켓을 확인한 앱으로 DMG와 업데이트 ZIP, 서명된 목록, 체크섬을 만듭니다. `publish`는 릴리스 파일을 올린 다음 서명된 목록을 갱신·푸시합니다. 패키징 시 기록한 소스 커밋이 현재 커밋 또는 GitHub main과 다르면 게시하지 않습니다. 빌드 후 앱 소스가 바뀌었다면 먼저 다시 빌드해야 합니다.
+
+공증 전 내부 테스트만 하려면 `package --app <서명된 앱 경로> --allow-unnotarized`를 사용합니다. 파일과 폴더에 `TEST`가 표시되며 `publish`는 이를 거부합니다. TEST 패키지 안의 appcast는 시험용으로만 보관하고 `updates/appcast.xml`에 복사하지 마세요.
+
+업데이트 비밀키는 Mac 키체인의 Sparkle 계정 `studio.superless.Orbit`에 보관합니다. 저장소에는 공개키만 포함됩니다. 다른 빌드 Mac을 사용할 때는 기존 비밀키를 안전하게 이전해야 하며, 새 키를 임의로 생성해 교체하면 이미 설치된 앱이 다음 업데이트를 검증할 수 없습니다.
+
+설치 보류 검증:
+
+```sh
+xcrun swiftc OrbitApp/Sources/UpdateInstallationGate.swift OrbitApp/Tests/UpdateInstallationChecks.swift -o /tmp/orbit-update-checks
+/tmp/orbit-update-checks
+```
+
+`OrbitApp/Tools/test_updater.py`는 별도 번들 ID와 로컬 서버로 변조 목록 거부 및 실제 자동 교체·재실행을 시험합니다. 실제 Orbit 사용자 설정과 설치 앱은 변경하지 않습니다.
 
 ## 실행
 

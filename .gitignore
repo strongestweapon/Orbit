@@ -16,3 +16,6 @@ OrbitShaders/previews/
 OrbitShaders/review/
 OrbitTextures/review/
 *.zip
+*.dmg
+Releases/
+Archive/

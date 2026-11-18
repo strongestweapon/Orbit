@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
+IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+  <channel>
+    <title>Orbit Updates</title>
+    <link>https://github.com/strongestweapon/Orbit/releases</link>
+    <description>Orbit의 정식 공증 릴리스입니다.</description>
+    <language>ko</language>
+  </channel>
+</rss><!-- sparkle-signatures:
+edSignature: fKr6+6ibwUzaWO0sCrlAKneNoWgvar311EYHKmS+iQKVePbPf7Q4VHv7VrOiFwejSvvxv20ExBwa6XVNLDB/CA==
+length: 612
+-->

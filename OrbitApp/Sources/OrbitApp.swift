@@ -15,15 +15,25 @@ final class OrbitAppDelegate: NSObject, NSApplicationDelegate {
 struct OrbitApplication: App {
     @NSApplicationDelegateAdaptor(OrbitAppDelegate.self) private var appDelegate
     @StateObject private var model = OrbitModel()
+    @StateObject private var updater = OrbitUpdater()
     var body: some Scene {
         WindowGroup("Orbit") {
             ContentView(model: model)
+                .environmentObject(updater)
+                .disabled(updater.installing)
                 .frame(minWidth: 1060, minHeight: 700)
                 .preferredColorScheme(.dark)
-                .onAppear { NSApplication.shared.activate(ignoringOtherApps: true) }
+                .onAppear {
+                    NSApplication.shared.activate(ignoringOtherApps: true)
+                    updater.startOnce(model: model)
+                }
         }
         .defaultSize(width: 1280, height: 820)
         .commands {
+            CommandGroup(after: .appInfo) {
+                Button("업데이트 확인…") { updater.checkForUpdates() }
+                    .disabled(!updater.canCheck || updater.isBlocked || updater.installing)
+            }
             CommandGroup(after: .newItem) {
                 Button("재생 / 일시정지") { model.playing.toggle() }.keyboardShortcut(.space, modifiers: [])
                 Button("출력 전체화면 전환") { model.toggleOutputFullscreen() }

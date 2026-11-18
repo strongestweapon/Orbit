@@ -184,6 +184,7 @@ struct ContentView: View {
             Spacer()
             Text(model.controlOutputEnabled ? model.controlOutputStatus : model.lastMessage).lineLimit(1)
             Text("v"+(Bundle.main.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String ?? ""))
+            OrbitUpdateMenu()
             Text("Metal · "+model.frameRate.label).frame(width:105,alignment:.trailing)
         }.font(.system(size:9,design:.monospaced)).foregroundStyle(.secondary).padding(.horizontal,20).frame(height:23).background(orbitPanel)
     }

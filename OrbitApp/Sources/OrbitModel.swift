@@ -68,8 +68,12 @@ final class OrbitModel: ObservableObject {
     @Published var textureStatus = "텍스처 준비 중"
     @Published private(set) var parameterValues: [String:Double] = [:]
     @Published var controlOutputEnabled = false {
-        didSet { controlOutput.reset(); controlOutputStatus = controlOutputEnabled ? "제어 송신 대기" : "제어 자동 송신 꺼짐" }
+        didSet {
+            if updateInstallationInProgress && controlOutputEnabled { controlOutputEnabled = false }
+            controlOutput.reset(); controlOutputStatus = controlOutputEnabled ? "제어 송신 대기" : "제어 자동 송신 꺼짐"
+        }
     }
+    var updateInstallationInProgress = false
     @Published var controlOutputStatus = "제어 자동 송신 꺼짐"
     @Published private(set) var controlDeliveries: [String:ControlDelivery] = [:]
     let receiver = OSCReceiver()
@@ -386,6 +390,7 @@ final class OrbitModel: ObservableObject {
                                                 width:width,height:height,mode:mode)
     }
     func startBenchmark(resolution: OutputResolution, includePreviews: Bool) {
+        guard !updateInstallationInProgress else { return }
         guard !performance.isRunning, !outputOpen, !usesTexture, let scene=selectedScene,
               let device=OrbitGPU.shared.device else { return }
         do {
@@ -461,7 +466,7 @@ final class OrbitModel: ObservableObject {
         }
     }
     func startOutput() {
-        guard !performance.isRunning else { return }
+        guard !performance.isRunning, !updateInstallationInProgress else { return }
         stopOutput()
         let currentScreen = NSApp.keyWindow?.screen ?? NSApp.mainWindow?.screen ?? NSScreen.main
         let screen = selectedDisplayID == 0 ? currentScreen : NSScreen.screens.first(where: {

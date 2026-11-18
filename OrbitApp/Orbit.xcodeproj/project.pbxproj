@@ -16,11 +16,13 @@
 		49B9F29133ACBBAB25DC3E6D /* ParameterMappingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41FC26EB5348B65B7FDAE675 /* ParameterMappingView.swift */; };
 		49CBEE7CE26D0D6B540F5281 /* ControlOutput.swift in Sources */ = {isa = PBXBuildFile; fileRef = 260FEB427A3C3B0643D4E51F /* ControlOutput.swift */; };
 		5B4083000F7E1AE55E9B4ACF /* ParameterRouting.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD41E236F79EDE0F2637CC5A /* ParameterRouting.swift */; };
+		681C843A5DDA176C16D62C51 /* KakaoTalk_Video_2026-11-10-09-37-08.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = 224EDD9A6CC76B831B6CC42B /* KakaoTalk_Video_2026-11-10-09-37-08.mp4 */; };
 		6AD4E83C3CF65EF2EDA5C33C /* MetalRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11E32FED746AE6ED06BF720 /* MetalRenderer.swift */; };
 		6DA94FA414EF86D643B2B599 /* PerformanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B46732B7C89FD49ED6732B3 /* PerformanceView.swift */; };
-		721B569C836139B2C61DED20 /* KakaoTalk_Video_2026-11-10-09-37-08.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = 75D42149EF4E1E7C3442ACEA /* KakaoTalk_Video_2026-11-10-09-37-08.mp4 */; };
 		7D6B7FBC0980DD6B5F4024CB /* RenderBenchmark.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3827D05F51B02F0D685D316A /* RenderBenchmark.swift */; };
+		83D442884C055C4E0FDEEF0E /* OrbitUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = B55FECB4F7D2BA4A1B19990C /* OrbitUpdater.swift */; };
 		848B88E74A505DA5835C60BF /* OrbitAppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = FFFC97DCF2880340E48CD95A /* OrbitAppIcon.icns */; };
+		873A3B554C2E9B9F43ACDAE0 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = C2A8FC0F7C6CFE7D9DDFC83E /* Sparkle */; };
 		8DC5BD10D27A221949CB860F /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49871CDB0B18BD84E815765F /* ContentView.swift */; };
 		9AA209DCC7BE4490914BEDA9 /* golden-drift-reference.png in Resources */ = {isa = PBXBuildFile; fileRef = 3A70140ADF511300B34F9BA1 /* golden-drift-reference.png */; };
 		9B98678E642671FB812C13BE /* OSCReceiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 442ABBD99849283C21E7F61F /* OSCReceiver.swift */; };
@@ -30,6 +32,7 @@
 		B6033C55F8A1E82FA82B6020 /* OrbitModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C8A50C94742D7DA18CF8FB1 /* OrbitModel.swift */; };
 		BD0312FB7E1888AA3639BBCD /* OrbitLogo.png in Resources */ = {isa = PBXBuildFile; fileRef = 332AC379A0E28B5E029787A2 /* OrbitLogo.png */; };
 		C0BC95029586B3FBB9B29D4A /* OrbitApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADFAA53066E70B7AA6CD3986 /* OrbitApp.swift */; };
+		DEE44E606F2F3B5CEB53DF00 /* UpdateInstallationGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F6A65E71EB53A0E54DC9493 /* UpdateInstallationGate.swift */; };
 		F3B5325239EF140CDC65C4A1 /* spectral-fragments-reference.png in Resources */ = {isa = PBXBuildFile; fileRef = 4B03381080881BF0E1A2C350 /* spectral-fragments-reference.png */; };
 		F71A3820A15F0CAF6FBC13B3 /* config in Resources */ = {isa = PBXBuildFile; fileRef = 7E9691F5740D86839DD72043 /* config */; };
 /* End PBXBuildFile section */
@@ -38,6 +41,7 @@
 		017234CB6B16D3AD70918CEE /* ReferenceVideoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReferenceVideoView.swift; sourceTree = "<group>"; };
 		1C8A50C94742D7DA18CF8FB1 /* OrbitModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrbitModel.swift; sourceTree = "<group>"; };
 		21B98BBD54F51635F802C526 /* PlaybackTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackTelemetry.swift; sourceTree = "<group>"; };
+		224EDD9A6CC76B831B6CC42B /* KakaoTalk_Video_2026-11-10-09-37-08.mp4 */ = {isa = PBXFileReference; path = "KakaoTalk_Video_2026-11-10-09-37-08.mp4"; sourceTree = "<group>"; };
 		260FEB427A3C3B0643D4E51F /* ControlOutput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlOutput.swift; sourceTree = "<group>"; };
 		332AC379A0E28B5E029787A2 /* OrbitLogo.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = OrbitLogo.png; sourceTree = "<group>"; };
 		3827D05F51B02F0D685D316A /* RenderBenchmark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenderBenchmark.swift; sourceTree = "<group>"; };
@@ -49,30 +53,33 @@
 		4B46732B7C89FD49ED6732B3 /* PerformanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceView.swift; sourceTree = "<group>"; };
 		68ED161AE146F559867F4590 /* OutputGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutputGeometry.swift; sourceTree = "<group>"; };
 		698220E0EBB4933D774EE19E /* metal */ = {isa = PBXFileReference; lastKnownFileType = folder; name = metal; path = ../OrbitShaders/metal; sourceTree = SOURCE_ROOT; };
-		75D42149EF4E1E7C3442ACEA /* KakaoTalk_Video_2026-11-10-09-37-08.mp4 */ = {isa = PBXFileReference; path = "KakaoTalk_Video_2026-11-10-09-37-08.mp4"; sourceTree = "<group>"; };
 		7E9691F5740D86839DD72043 /* config */ = {isa = PBXFileReference; lastKnownFileType = folder; name = config; path = ../OrbitShaders/config; sourceTree = SOURCE_ROOT; };
 		8659D41E40CE3E0900595962 /* FrameRateMeter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameRateMeter.swift; sourceTree = "<group>"; };
 		93E43D9E19F5EF7D480B0771 /* Orbit.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Orbit.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		9F6A65E71EB53A0E54DC9493 /* UpdateInstallationGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateInstallationGate.swift; sourceTree = "<group>"; };
 		AB8BB74462AC42160005915D /* OutputWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutputWindowController.swift; sourceTree = "<group>"; };
 		ADFAA53066E70B7AA6CD3986 /* OrbitApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrbitApp.swift; sourceTree = "<group>"; };
 		B11E32FED746AE6ED06BF720 /* MetalRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalRenderer.swift; sourceTree = "<group>"; };
 		B23ACF8A6EDC193ECA1207A0 /* OrbitTextureSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrbitTextureSource.swift; sourceTree = "<group>"; };
+		B55FECB4F7D2BA4A1B19990C /* OrbitUpdater.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrbitUpdater.swift; sourceTree = "<group>"; };
 		CFBAF8129D2DC544A2451FB4 /* textures */ = {isa = PBXFileReference; lastKnownFileType = folder; name = textures; path = ../OrbitTextures/textures; sourceTree = SOURCE_ROOT; };
 		DD41E236F79EDE0F2637CC5A /* ParameterRouting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParameterRouting.swift; sourceTree = "<group>"; };
 		F1BBF405377E23759F08F916 /* ConnectionViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionViews.swift; sourceTree = "<group>"; };
 		FFFC97DCF2880340E48CD95A /* OrbitAppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = OrbitAppIcon.icns; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
-/* Begin PBXGroup section */
-		00ECA7FF55D55998AD25B1CA /* Orbit */ = {
-			isa = PBXGroup;
-			children = (
-				75D42149EF4E1E7C3442ACEA /* KakaoTalk_Video_2026-11-10-09-37-08.mp4 */,
+/* Begin PBXFrameworksBuildPhase section */
+		AC23419267EB092E8D8A05AB /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				873A3B554C2E9B9F43ACDAE0 /* Sparkle in Frameworks */,
 			);
-			name = Orbit;
-			path = ..;
-			sourceTree = "<group>";
+			runOnlyForDeploymentPostprocessing = 0;
 		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
 		B307547D1ABD752BE02491B9 /* Products */ = {
 			isa = PBXGroup;
 			children = (
@@ -92,15 +99,24 @@
 			path = Resources;
 			sourceTree = "<group>";
 		};
+		B85AEC8D8F54381C5C9634F7 /* SUPERLESS-981 */ = {
+			isa = PBXGroup;
+			children = (
+				224EDD9A6CC76B831B6CC42B /* KakaoTalk_Video_2026-11-10-09-37-08.mp4 */,
+			);
+			name = "SUPERLESS-981";
+			path = ..;
+			sourceTree = "<group>";
+		};
 		C5F01767FDAE31EE06DFF523 = {
 			isa = PBXGroup;
 			children = (
 				7E9691F5740D86839DD72043 /* config */,
 				698220E0EBB4933D774EE19E /* metal */,
 				CFBAF8129D2DC544A2451FB4 /* textures */,
-				00ECA7FF55D55998AD25B1CA /* Orbit */,
 				B6871FA730657E0F618EBA65 /* Resources */,
 				D0DC853F0023AB4D57FBEFC2 /* Sources */,
+				B85AEC8D8F54381C5C9634F7 /* SUPERLESS-981 */,
 				B307547D1ABD752BE02491B9 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -116,6 +132,7 @@
 				ADFAA53066E70B7AA6CD3986 /* OrbitApp.swift */,
 				1C8A50C94742D7DA18CF8FB1 /* OrbitModel.swift */,
 				B23ACF8A6EDC193ECA1207A0 /* OrbitTextureSource.swift */,
+				B55FECB4F7D2BA4A1B19990C /* OrbitUpdater.swift */,
 				442ABBD99849283C21E7F61F /* OSCReceiver.swift */,
 				68ED161AE146F559867F4590 /* OutputGeometry.swift */,
 				AB8BB74462AC42160005915D /* OutputWindowController.swift */,
@@ -125,6 +142,7 @@
 				21B98BBD54F51635F802C526 /* PlaybackTelemetry.swift */,
 				017234CB6B16D3AD70918CEE /* ReferenceVideoView.swift */,
 				3827D05F51B02F0D685D316A /* RenderBenchmark.swift */,
+				9F6A65E71EB53A0E54DC9493 /* UpdateInstallationGate.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -138,6 +156,7 @@
 			buildPhases = (
 				1A83EACBC247740EBC0E6135 /* Sources */,
 				744EABC5C142532226634E12 /* Resources */,
+				AC23419267EB092E8D8A05AB /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -145,6 +164,7 @@
 			);
 			name = Orbit;
 			packageProductDependencies = (
+				C2A8FC0F7C6CFE7D9DDFC83E /* Sparkle */,
 			);
 			productName = Orbit;
 			productReference = 93E43D9E19F5EF7D480B0771 /* Orbit.app */;
@@ -173,6 +193,9 @@
 			);
 			mainGroup = C5F01767FDAE31EE06DFF523;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				D2FAFE15914F3543C362D846 /* XCRemoteSwiftPackageReference "Sparkle" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = B307547D1ABD752BE02491B9 /* Products */;
 			projectDirPath = "";
@@ -188,7 +211,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				721B569C836139B2C61DED20 /* KakaoTalk_Video_2026-11-10-09-37-08.mp4 in Resources */,
+				681C843A5DDA176C16D62C51 /* KakaoTalk_Video_2026-11-10-09-37-08.mp4 in Resources */,
 				848B88E74A505DA5835C60BF /* OrbitAppIcon.icns in Resources */,
 				BD0312FB7E1888AA3639BBCD /* OrbitLogo.png in Resources */,
 				F71A3820A15F0CAF6FBC13B3 /* config in Resources */,
@@ -215,6 +238,7 @@
 				C0BC95029586B3FBB9B29D4A /* OrbitApp.swift in Sources */,
 				B6033C55F8A1E82FA82B6020 /* OrbitModel.swift in Sources */,
 				319E46BB462C32B7629C07A4 /* OrbitTextureSource.swift in Sources */,
+				83D442884C055C4E0FDEEF0E /* OrbitUpdater.swift in Sources */,
 				4433AE7905B23E0F53F89077 /* OutputGeometry.swift in Sources */,
 				A75402C429AFB995A4186408 /* OutputWindowController.swift in Sources */,
 				49B9F29133ACBBAB25DC3E6D /* ParameterMappingView.swift in Sources */,
@@ -223,6 +247,7 @@
 				07EC6C5C2ABA39B54D8AB136 /* PlaybackTelemetry.swift in Sources */,
 				48822090527C5A268376AE8A /* ReferenceVideoView.swift in Sources */,
 				7D6B7FBC0980DD6B5F4024CB /* RenderBenchmark.swift in Sources */,
+				DEE44E606F2F3B5CEB53DF00 /* UpdateInstallationGate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -284,7 +309,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -299,7 +324,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.5.4;
+				MARKETING_VERSION = 0.6.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -365,7 +390,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -386,7 +411,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.5.4;
+				MARKETING_VERSION = 0.6.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -420,6 +445,25 @@
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		D2FAFE15914F3543C362D846 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = exactVersion;
+				version = 2.10.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		C2A8FC0F7C6CFE7D9DDFC83E /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D2FAFE15914F3543C362D846 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 0A57824173AF238C16E5DFDB /* Project object */;
 }
