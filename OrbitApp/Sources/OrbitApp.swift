@@ -57,6 +57,15 @@ struct OrbitApplication: App {
                 .disabled(updater.installing)
                 .frame(minWidth: 1060, minHeight: 700)
                 .preferredColorScheme(.dark)
+                .alert("Orbit \(updater.readyVersion ?? "") 업데이트",isPresented:$updater.showingInstallConfirmation) {
+                    Button("지금 업데이트") { updater.confirmInstallation() }
+                        .disabled(updater.isBlocked)
+                    Button("나중에",role:.cancel) {}
+                } message: {
+                    Text(updater.isBlocked
+                         ? "영상 출력·제어 송신·성능 측정이 끝난 뒤 다시 선택해 주세요. 자동으로 재시작하지 않습니다."
+                         : "설정을 저장하고 업데이트한 뒤 Orbit을 재시작합니다.")
+                }
                 .onAppear {
                     appDelegate.model = model
                     NSApplication.shared.activate(ignoringOtherApps: true)
@@ -69,6 +78,10 @@ struct OrbitApplication: App {
             CommandGroup(after: .appInfo) {
                 Button("업데이트 확인…") { updater.checkForUpdates() }
                     .disabled(!updater.canCheck || updater.isBlocked || updater.installing)
+                if let version = updater.readyVersion {
+                    Button("\(version) 설치 및 재시작…") { updater.installIfReady() }
+                        .disabled(updater.isBlocked || updater.installing)
+                }
             }
             CommandGroup(after: .newItem) {
                 Button("재생 / 일시정지") { model.playing.toggle() }.keyboardShortcut(.space, modifiers: [])

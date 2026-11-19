@@ -184,7 +184,12 @@ def package(args):
         shutil.copyfile(dmg_path, feed_work / dmg_path.name)
         shutil.copyfile(ROOT / 'updates/appcast.xml', feed_work / 'appcast.xml')
         shutil.copyfile(notes, feed_work / (dmg_path.stem + '.txt'))
-        run(sparkle / 'generate_appcast', '--account', ACCOUNT, '--maximum-deltas', '0',
+        # Older Orbit builds enabled silent updates. Require their user to accept
+        # the consent-policy migration before downloading/installing this release.
+        consent_options = []
+        if minimum := info.get('OrbitMinimumAutoupdateVersion'):
+            consent_options = ['--major-version', str(minimum)]
+        run(sparkle / 'generate_appcast', '--account', ACCOUNT, '--maximum-deltas', '0', *consent_options,
             '--download-url-prefix', f'https://github.com/{REPO}/releases/download/v{version}/',
             '--embed-release-notes', feed_work)
         verify_update(feed_work / 'appcast.xml', dmg_path, info['SUPublicEDKey'])

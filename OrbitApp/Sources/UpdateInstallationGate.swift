@@ -1,7 +1,7 @@
 import Foundation
 
-/// Serializes installation on the main queue and rechecks live output after
-/// transitions such as startOutput(), which briefly closes the previous window.
+/// Holds postponed installations until a fresh user confirmation. Becoming idle
+/// never grants permission to restart; recheck output after the next runloop turn.
 @MainActor
 final class UpdateInstallationGate {
     private let isBlocked: () -> Bool
@@ -19,11 +19,11 @@ final class UpdateInstallationGate {
     }
 
     func schedule(_ installation: @escaping () -> Void) {
+        cancel()
         pending = installation
-        resumeIfSafe()
     }
 
-    func resumeIfSafe() {
+    func installAfterUserConfirmation() {
         guard pending != nil, !scheduled, !isBlocked() else { return }
         scheduled = true
         let token = generation

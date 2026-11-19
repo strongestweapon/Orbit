@@ -4,7 +4,7 @@ import Sparkle
 import SwiftUI
 
 @MainActor
-final class OrbitUpdater: NSObject, ObservableObject, SPUUpdaterDelegate {
+final class OrbitUpdater: NSObject, ObservableObject, SPUUpdaterDelegate, SPUStandardUserDriverDelegate {
     @Published private(set) var status = "업데이트 준비"
     @Published private(set) var detail = "앱을 실행할 때마다 새 버전을 확인합니다."
     @Published private(set) var canCheck = false
@@ -12,11 +12,14 @@ final class OrbitUpdater: NSObject, ObservableObject, SPUUpdaterDelegate {
     @Published private(set) var installing = false
     @Published private(set) var readyVersion: String?
     @Published private(set) var lastChecked: Date?
+    @Published var showingInstallConfirmation = false
     private weak var model: OrbitModel?
     private var started = false
+    private var deferredByUser = false
+    private var pendingUpdateNotice = false
     private var subscriptions = Set<AnyCancellable>()
     private lazy var controller = SPUStandardUpdaterController(
-        startingUpdater: false, updaterDelegate: self, userDriverDelegate: nil)
+        startingUpdater: false, updaterDelegate: self, userDriverDelegate: self)
     private lazy var gate = UpdateInstallationGate(isBlocked: { [weak self] in
         guard let self, let model = self.model else { return true }
         return model.outputOpen || model.controlOutputEnabled || model.performance.isRunning
@@ -49,16 +52,50 @@ final class OrbitUpdater: NSObject, ObservableObject, SPUUpdaterDelegate {
         controller.checkForUpdates(nil)
     }
 
-    func installIfReady() { gate.resumeIfSafe() }
+    func installIfReady() {
+        guard gate.hasPendingInstallation, !installing else { return }
+        showingInstallConfirmation = true
+    }
+
+    func confirmInstallation() {
+        showingInstallConfirmation = false
+        gate.installAfterUserConfirmation()
+    }
 
     private func operationChanged() {
         guard let model else { return }
         isBlocked = model.outputOpen || model.controlOutputEnabled || model.performance.isRunning
         if gate.hasPendingInstallation {
-            status = isBlocked ? "업데이트 설치 대기" : "업데이트 설치 준비"
-            detail = isBlocked ? "영상 출력·제어 송신·성능 측정이 끝나면 자동으로 설치하고 재시작합니다." : "새 버전을 설치하고 Orbit을 다시 실행합니다."
-            gate.resumeIfSafe()
+            status = "업데이트 설치 대기"
+            detail = isBlocked ? "영상 출력·제어 송신·성능 측정 중입니다. 종료 후 업데이트 메뉴에서 설치를 선택하세요." : "업데이트 메뉴에서 설치를 선택하면 확인 후 재시작합니다."
         }
+        showPendingUpdateNotice()
+    }
+
+    // Sparkle normally waits for a later app activation if a background check
+    // finishes outside its launch window. Show the choice explicitly, while
+    // keeping the update window away from an active performance/output.
+    var supportsGentleScheduledUpdateReminders: Bool { true }
+
+    func standardUserDriverShouldHandleShowingScheduledUpdate(_ update: SUAppcastItem,
+                                                               andInImmediateFocus immediateFocus: Bool) -> Bool {
+        false
+    }
+
+    func standardUserDriverWillHandleShowingUpdate(_ handleShowingUpdate: Bool,
+                                                   forUpdate update: SUAppcastItem,
+                                                   state: SPUUserUpdateState) {
+        pendingUpdateNotice = !handleShowingUpdate
+        showPendingUpdateNotice()
+    }
+
+    func standardUserDriverWillFinishUpdateSession() { pendingUpdateNotice = false }
+
+    private func showPendingUpdateNotice() {
+        guard pendingUpdateNotice, let model,
+              !model.outputOpen, !model.controlOutputEnabled, !model.performance.isRunning else { return }
+        pendingUpdateNotice = false
+        controller.checkForUpdates(nil)
     }
 
     private func prepareInstallation() {
@@ -72,6 +109,9 @@ final class OrbitUpdater: NSObject, ObservableObject, SPUUpdaterDelegate {
     private func report(_ error: Error) {
         gate.cancel()
         readyVersion = nil
+        showingInstallConfirmation = false
+        deferredByUser = false
+        pendingUpdateNotice = false
         installing = false
         model?.updateInstallationInProgress = false
         status = "업데이트 확인 실패"
@@ -79,13 +119,24 @@ final class OrbitUpdater: NSObject, ObservableObject, SPUUpdaterDelegate {
     }
 
     func updater(_ updater: SPUUpdater, mayPerform updateCheck: SPUUpdateCheck) throws {
+        deferredByUser = false
         status = "업데이트 확인 중"
         detail = "GitHub에서 새 버전을 확인합니다."
     }
 
     func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
         status = "새 버전 \(item.displayVersionString)"
-        detail = "새 버전을 다운로드합니다."
+        detail = "업데이트 팝업에서 설치하거나 나중에 할 수 있습니다."
+    }
+
+    @objc(updater:userDidMakeChoice:forUpdate:state:)
+    func updater(_ updater: SPUUpdater, userDidMake choice: SPUUserUpdateChoice,
+                 forUpdate item: SUAppcastItem, state: SPUUserUpdateState) {
+        deferredByUser = choice != .install
+        if deferredByUser {
+            status = "업데이트 나중에"
+            detail = "Orbit \(item.displayVersionString) · 업데이트 메뉴에서 다시 확인할 수 있습니다."
+        }
     }
 
     func updater(_ updater: SPUUpdater, willDownloadUpdate item: SUAppcastItem, with request: NSMutableURLRequest) {
@@ -108,7 +159,9 @@ final class OrbitUpdater: NSObject, ObservableObject, SPUUpdaterDelegate {
 
     func updater(_ updater: SPUUpdater, shouldPostponeRelaunchForUpdate item: SUAppcastItem,
                  untilInvokingBlock installHandler: @escaping () -> Void) -> Bool {
-        // Also covers manual installation and output started during a download.
+        // Sparkle's visible Install & Relaunch button provides consent here.
+        // If operation has started since that choice, require a NEW confirmation
+        // after it ends instead of restarting automatically when it becomes idle.
         if let model, model.outputOpen || model.controlOutputEnabled || model.performance.isRunning {
             readyVersion = item.displayVersionString
             gate.schedule(installHandler)
@@ -133,7 +186,7 @@ final class OrbitUpdater: NSObject, ObservableObject, SPUUpdaterDelegate {
             let nsError = error as NSError
             if nsError.domain == SUSparkleErrorDomain && nsError.code == SUError.noUpdateError.rawValue { return }
             report(error)
-        } else if readyVersion == nil && !installing {
+        } else if readyVersion == nil && !installing && !deferredByUser {
             status = "업데이트 확인 완료"
             detail = "다음 실행 때 다시 확인합니다."
         }
