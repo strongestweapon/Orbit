@@ -9,6 +9,25 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <description>Orbit의 정식 공증 릴리스입니다.</description>
         <language>ko</language>
         <item>
+            <title>0.7.1</title>
+            <pubDate>Thu, 19 Nov 2026 22:47:05 +0900</pubDate>
+            <sparkle:minimumAutoupdateVersion>15</sparkle:minimumAutoupdateVersion>
+            <sparkle:version>15</sparkle:version>
+            <sparkle:shortVersionString>0.7.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description sparkle:format="plain-text"><![CDATA[Orbit 0.7.1
+
+• 새 버전을 발견하면 팝업에서 업데이트 설치 또는 나중에 하기를 선택합니다.
+• 자동 다운로드·자동 설치를 끄고, 다운로드 후 설치·재실행도 사용자가 직접 선택하도록 변경했습니다. 기존에 저장된 자동 설치 설정에도 적용됩니다.
+• 영상 출력·제어 송신·성능 측정 때문에 보류된 업데이트는 작업이 끝나도 자동 재시작하지 않습니다. 업데이트 메뉴에서 다시 확인한 뒤 설치합니다.
+• 기존 0.6.0·0.7.0에서도 이번 버전을 자동 설치하지 않고 먼저 안내하도록 업데이트 목록을 설정했습니다.
+
+macOS 14 이상 · Apple Silicon / Intel 공용
+공연·설치 운영을 마친 뒤 업데이트하세요. 설정과 매핑은 보존됩니다.
+]]></description>
+            <enclosure url="https://github.com/strongestweapon/Orbit/releases/download/v0.7.1/Orbit-0.7.1-macOS-universal.dmg" length="68913635" type="application/octet-stream" sparkle:edSignature="5nCHUuMaasbzwo9vkZLeKKExhGULuNKr5ZgsPeqldTYMMqZ2hSkXceKDHouKa7n9KYwSrctwr4nhozpWgRRgDA=="/>
+        </item>
+        <item>
             <title>0.7.0</title>
             <pubDate>Thu, 19 Nov 2026 22:20:38 +0900</pubDate>
             <sparkle:version>14</sparkle:version>
@@ -53,6 +72,6 @@ macOS 14 이상 · Apple Silicon / Intel 공용
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: 64aJWSdotI4Bdb8RIAyJKHIfwhbWS7H8OB6H9d+9y6+2A38dpwsSRt9lx8wEFLQlxNhJDImGDA5vALsmJ5MkBg==
-length: 4122
+edSignature: lfmf4VqWqVCK33M7eHzR/OzbzFyqRi8jbQ32i2hdibTU2udr7aK6APhvAzROTaOYBULrQwiiDkw8KLIeVaoDCA==
+length: 5728
 -->
