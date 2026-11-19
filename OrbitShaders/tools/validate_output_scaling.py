@@ -29,6 +29,13 @@ def main():
             ref_x, ref_y = 300, row * 300 + 150
             color = sectors[int(ref_y * height / 2160), int(ref_x * width / 3840), :3]
             assert np.max(np.abs(color.astype(int) - reference[ref_y, ref_x, :3])) <= 1
+        radial, _ = renderer.render(scene, width, height, view=2,
+                                    overrides={**options, 'testPattern': 2})
+        for row in range(5):
+            # Supplied drawing convention must survive scaling, including the short fifth row.
+            x_sample=int(100*width/3840)
+            assert np.array_equal(radial[int((row*300+12)*height/2160),x_sample,:3],[0,0,255])
+            assert np.array_equal(radial[int((row*300+288)*height/2160),x_sample,:3],[255,0,0])
         print(f'PASS: {width}×{height} — 5 segments, no clipping, opaque black padding')
 
     # Every production scene must use the same LED packing, never ring preview coordinates.

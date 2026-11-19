@@ -99,7 +99,7 @@ struct OSCMappingView: View {
                                 Text(row.active ? (row.globalID == nil ? "현재 씬" : "항상 활성") : "비활성").font(.caption).foregroundStyle(.secondary)
                             }.frame(width:125,alignment:.trailing)
                         }.padding(9).frame(height:53)
-                            .background(selectedID == row.id ? Color.green.opacity(0.12) : Color.white.opacity(0.035),in:RoundedRectangle(cornerRadius:6))
+                            .background(selectedID == row.id ? orbitAccent.opacity(0.12) : Color.white.opacity(0.035),in:RoundedRectangle(cornerRadius:6))
                             .contentShape(Rectangle())
                     }.buttonStyle(.plain).accessibilityIdentifier("mapping_"+row.id)
                 }
@@ -121,6 +121,8 @@ struct OSCMappingView: View {
             } else { Text("매핑을 선택하면 아래에서 설정을 편집합니다.").foregroundStyle(.secondary) }
             Spacer(minLength:0)
         }.padding(20).frame(width:820,height:680).background(Color(white:0.07)).font(.system(size:12))
+            .tint(orbitAccent).accentColor(orbitAccent)
+            .buttonStyle(OrbitSecondaryButtonStyle())
             .textFieldStyle(.roundedBorder)
             .onChange(of:scope) { _,_ in
                 if let index=rows.firstIndex(where: { $0.id == selectedID }) { page=index/pageSize }

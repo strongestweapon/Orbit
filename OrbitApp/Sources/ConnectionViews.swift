@@ -51,6 +51,7 @@ struct ConnectionStrip: View {
                             }
                         }
                     } label:{Text("출력 추가")}
+                        .tint(.white).foregroundStyle(.white)
                         .menuStyle(.borderlessButton).fixedSize().accessibilityIdentifier("addControlOutput")
                         .disabled(model.selectedScene?.testScene != false)
                     Toggle("송신",isOn:$model.controlOutputEnabled)
@@ -109,7 +110,7 @@ private struct SensorConnectionCard: View {
                         SensorDot(sensor:sensor,running:model.oscRunning)
                         Text(sensor.name).fontWeight(.medium).lineLimit(1)
                         Spacer(minLength:2)
-                        Text(valueLabel(state)).monospacedDigit().foregroundStyle(state == .receiving ? .green : .secondary).lineLimit(1)
+                        Text(valueLabel(state)).monospacedDigit().foregroundStyle(state == .receiving ? Color.white : .secondary).lineLimit(1)
                     }
                     HStack(spacing:5) {
                         Text(sensor.address).font(.system(size:9,design:.monospaced)).lineLimit(1).truncationMode(.middle)
@@ -147,7 +148,7 @@ private struct OutputConnectionCard: View {
                     HStack(spacing:5) {
                         Text(route.endpointLabel).font(.system(size:9,design:.monospaced)).lineLimit(1).truncationMode(.middle)
                         Spacer(minLength:2)
-                        Text(state.0).foregroundStyle(state.1).lineLimit(1)
+                        Text(state.0).foregroundStyle(state.1 == orbitAccent ? Color.white : state.1).lineLimit(1)
                     }.font(.system(size:9)).foregroundStyle(.secondary)
                 }.padding(.horizontal,10).frame(maxWidth:.infinity).frame(height:44)
                     .background(Color.white.opacity(0.045),in:RoundedRectangle(cornerRadius:6)).contentShape(Rectangle())
@@ -170,6 +171,6 @@ private struct OutputConnectionCard: View {
         if !model.controlOutputEnabled {return (delivery == nil ? "송신 꺼짐" : "마지막 송신",.secondary)}
         if !route.enabled {return ("비활성",.secondary)}
         guard let delivery else {return ("송신 대기",.secondary)}
-        return now.timeIntervalSince(delivery.at)<5 ? ("송신 중",.cyan) : ("송신 지연",.orange)
+        return now.timeIntervalSince(delivery.at)<5 ? ("송신 중",orbitAccent) : ("송신 지연",.orange)
     }
 }

@@ -3,6 +3,8 @@ float orbitRect(vec2 p, vec2 center, vec2 halfSize) {
     return 1.0 - smoothstep(0.0, 0.009, max(d.x, d.y));
 }
 float orbitDigit(vec2 p, float n) {
+    // Glyph tops point outward. Canonical radial v grows outward, unlike raster Y.
+    p.y = -p.y;
     float a = orbitRect(p, vec2(0,-0.27), vec2(0.13,0.025));
     float b = orbitRect(p, vec2(0.13,-0.135), vec2(0.025,0.12));
     float c = orbitRect(p, vec2(0.13,0.135), vec2(0.025,0.12));
@@ -51,7 +53,7 @@ vec3 orbitShade(vec2 uv, OrbitParams p) {
     }
     if (mode < 1.5) {
         float line = max(1.0-step(1.0, fract(s/100.0)*100.0),
-                         1.0-step(1.0, fract(uv.y*300.0/50.0)*50.0));
+                         1.0-step(1.0, fract((1.0-uv.y)*300.0/50.0)*50.0));
         return mix(vec3(0.02),vec3(0.9),line);
     }
     if (mode < 2.5) return orbitRadialTest(uv,mode);
@@ -67,6 +69,6 @@ vec3 orbitShade(vec2 uv, OrbitParams p) {
         float seam = min(local,span-local);
         return seam < 3.0 ? vec3(1.0) : vec3(0.03);
     }
-    if (mode < 9.5) return vec3(fract((floor(s)+floor(uv.y*300.0))*0.5)*2.0);
+    if (mode < 9.5) return vec3(fract((floor(s)+floor((1.0-uv.y)*300.0))*0.5)*2.0);
     return orbitRadialTest(uv,mode);
 }

@@ -40,6 +40,30 @@ struct ProbeFailure: Error { let message:String }
             guard command.status == .completed else { throw command.error ?? ProbeFailure(message:"GPU failed") }
             return Data(bytes:pixels.contents(),count:w*h*4)
         }
+        // Extracted assets retain canonical top=inner. Production output must convert to
+        // the installation drawing's top=outer without changing the physical ring preview.
+        let testDescriptor=MTLTextureDescriptor.texture2DDescriptor(pixelFormat:.rgba8Unorm,width:16,height:16,mipmapped:false)
+        testDescriptor.storageMode = .shared; testDescriptor.usage = .shaderRead
+        let orientationTexture=device.makeTexture(descriptor:testDescriptor)!
+        var testPixels=[UInt8](repeating:0,count:16*16*4)
+        for y in 0..<16 { for x in 0..<16 {
+            testPixels[(y*16+x)*4+(y<8 ? 0:2)]=255;testPixels[(y*16+x)*4+3]=255
+        }}
+        testPixels.withUnsafeBytes { orientationTexture.replace(region:MTLRegionMake2D(0,0,16,16),mipmapLevel:0,withBytes:$0.baseAddress!,bytesPerRow:16*4) }
+        let orientationFrame=OrbitTextureFrame(texture:orientationTexture,backing:nil,pixelBuffer:nil,index:0,sceneID:"orientation-test")
+        func rgb(_ pixels:Data,_ width:Int,_ x:Int,_ y:Int)->[UInt8] { Array(pixels[(y*width+x)*4..<(y*width+x)*4+3]) }
+        let orientationPacked=try render(orientationFrame,3840,2160,2)
+        for row in 0..<5 {
+            guard rgb(orientationPacked,3840,100,row*300+30)==[0,0,255],
+                  rgb(orientationPacked,3840,100,row*300+270)==[255,0,0] else {
+                throw ProbeFailure(message:"Texture raster orientation must be outer/top blue, inner/bottom red")
+            }
+        }
+        let orientationRing=try render(orientationFrame,800,800,1)
+        guard rgb(orientationRing,800,400,127)==[0,0,255],rgb(orientationRing,800,400,153)==[255,0,0] else {
+            throw ProbeFailure(message:"Texture ring orientation changed")
+        }
+        print("PASS texture orientation: raster top=outer, bottom=inner; physical ring preserved")
         func save(_ pixels:Data,_ w:Int,_ h:Int,_ file:String) {
             let provider=CGDataProvider(data:pixels as CFData)!
             let image=CGImage(width:w,height:h,bitsPerComponent:8,bitsPerPixel:32,bytesPerRow:w*4,

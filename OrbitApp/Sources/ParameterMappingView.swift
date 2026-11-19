@@ -28,14 +28,17 @@ struct ParameterRouteButton: View {
     @State private var presented = false
     var body: some View {
         let route = model.route(for:key)
+        let connected = route.input.enabled || route.output.enabled
         Button { presented.toggle() } label: {
             HStack(spacing:2) {
                 Image(systemName:"link").font(.system(size:11,weight:.semibold))
-                if route.input.enabled {Circle().fill(Color.green).frame(width:4,height:4)}
-                if route.output.enabled {Circle().fill(Color.cyan).frame(width:4,height:4)}
+                if route.input.enabled {Circle().fill(Color.white).frame(width:4,height:4)}
+                if route.output.enabled {Circle().fill(Color.white).frame(width:4,height:4)}
             }.frame(minWidth:20,minHeight:20)
+                .padding(.horizontal,2)
+                .background(connected ? orbitAccent : .clear,in:RoundedRectangle(cornerRadius:4))
         }.buttonStyle(.plain)
-            .foregroundStyle(route.input.enabled || route.output.enabled ? Color.green : Color.secondary)
+            .foregroundStyle(connected ? Color.white : Color.secondary)
             .help("\(title) · 입력 / 출력 매핑")
             .accessibilityLabel("\(title) 입력 / 출력 매핑").accessibilityIdentifier("route_"+key)
             .disabled(model.selectedScene?.testScene != false)
@@ -95,6 +98,8 @@ struct ParameterRoutingPopover: View {
                 Spacer(); Button("닫기",action:close).keyboardShortcut(.cancelAction)
             }
         }.padding(18).frame(width:460,height:630).background(Color(white:0.07)).font(.system(size:12))
+            .tint(orbitAccent).accentColor(orbitAccent)
+            .buttonStyle(OrbitSecondaryButtonStyle())
             .textFieldStyle(.roundedBorder).preferredColorScheme(.dark)
             .onAppear {tab=initialTab}
     }

@@ -103,6 +103,8 @@ struct PerformanceView: View {
                 }
             }
         }.padding(22).frame(width:620,height:510).background(Color(white:0.07))
+            .tint(orbitAccent).accentColor(orbitAccent)
+            .buttonStyle(OrbitSecondaryButtonStyle())
             .onDisappear { measurement.cancel() }
     }
     private func milliseconds(_ value:Double?)->String { value.map {String(format:"%.2f ms",$0)} ?? "—" }

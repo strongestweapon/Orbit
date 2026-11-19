@@ -159,6 +159,7 @@ struct OrbitUpdateMenu: View {
             Label(updater.status, systemImage: "arrow.down.circle")
         }
         .menuStyle(.borderlessButton).fixedSize()
+        .tint(.white).foregroundStyle(.white)
         .help(updater.detail).accessibilityIdentifier("orbitUpdateStatus")
     }
 }

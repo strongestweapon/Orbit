@@ -56,14 +56,14 @@ def validate_radial_patterns(renderer, scene):
             width=3564 if row<4 else 1188
             tile=packed[row*300:(row+1)*300,:width,:3]
             # Both halves retain the original segment color; only isolated halves turn black.
-            assert np.array_equal(tile[75,100], colors[row] if pattern!=11 else [0,0,0])
-            assert np.array_equal(tile[225,100], colors[row] if pattern!=10 else [0,0,0])
-            assert np.all(tile[:24]==([255,0,0] if pattern!=11 else [0,0,0])), 'Inner edge must be 24 px red'
-            assert np.all(tile[276:]==([0,0,255] if pattern!=10 else [0,0,0])), 'Outer edge must be 24 px blue'
-            if pattern!=11: assert np.all(tile[24]==colors[row]), 'Inner band is too thick'
-            if pattern!=10: assert np.all(tile[275]==colors[row]), 'Outer band is too thick'
-            if pattern==10: assert not tile[150:].any(), 'Inner-only leaks into outer half'
-            if pattern==11: assert not tile[:150].any(), 'Outer-only leaks into inner half'
+            assert np.array_equal(tile[75,100], colors[row] if pattern!=10 else [0,0,0])
+            assert np.array_equal(tile[225,100], colors[row] if pattern!=11 else [0,0,0])
+            assert np.all(tile[:24]==([0,0,255] if pattern!=10 else [0,0,0])), 'Drawing: top edge must be 24 px outer blue'
+            assert np.all(tile[276:]==([255,0,0] if pattern!=11 else [0,0,0])), 'Drawing: bottom edge must be 24 px inner red'
+            if pattern!=10: assert np.all(tile[24]==colors[row]), 'Outer band is too thick'
+            if pattern!=11: assert np.all(tile[275]==colors[row]), 'Inner band is too thick'
+            if pattern==10: assert not tile[:150].any(), 'Inner-only leaks into outer/top half'
+            if pattern==11: assert not tile[150:].any(), 'Outer-only leaks into inner/bottom half'
             # Read the seven digit segments from rendered pixels, independently of shader code.
             digits=[(0,1,1,0,0,0,0),(1,1,0,1,1,0,1),(1,1,1,1,0,0,1),
                     (0,1,1,0,0,1,1),(1,0,1,1,0,1,1)]
@@ -74,7 +74,7 @@ def validate_radial_patterns(renderer, scene):
                 if pattern==2:
                     assert np.all(tile[24:56]==colors[row]), 'Unexpected lettering above number'
                     assert np.all(tile[244:276]==colors[row]), 'Unexpected lettering below number'
-                for center_y in ([150] if pattern==2 else [75] if pattern==10 else [225]):
+                for center_y in ([150] if pattern==2 else [225] if pattern==10 else [75]):
                     center_x=594
                     segments=tuple(int(np.all(tile[center_y+dy,module*1188+center_x+dx]<12)) for dx,dy in points)
                     assert segments==digits[row], f'Wrong segment number at row {row+1}, module {module+1}: {segments}'
@@ -86,7 +86,38 @@ def validate_radial_patterns(renderer, scene):
         outer=800*.34722222; inner=outer*(1-scene['defaults']['ringWidth']); middle=(inner+outer)/2
         if pattern==10: assert not ring[radius>middle,:3].any(), 'IN is not inside on ring preview'
         if pattern==11: assert not ring[radius<middle,:3].any(), 'OUT is not outside on ring preview'
-    print('PASS five segment colors, numbers 1–5, 24 px red/blue edges, no IN/OUT lettering, isolated halves and radial flip',flush=True)
+    print('PASS five colors, upright numbers, 24 px outer/top blue and inner/bottom red, isolated halves and radial flip',flush=True)
+
+def validate_layout_orientation(renderer, scene):
+    # Independent drawing convention: source Y increases from outer radius to inner.
+    # Read asymmetric glyphs around the physical ring, not through orbitCoordinates.
+    ring,_=renderer.render(scene,2000,2000,1,overrides={'testPattern':0})
+    outer=2000*.34722222; inner=outer*(1-scene['defaults']['ringWidth'])
+    digits=[(0,1,1,0,0,0,0),(1,1,0,1,1,0,1),(1,1,1,1,0,0,1),
+            (0,1,1,0,0,1,1),(1,0,1,1,0,1,1)]
+    points=[(0,-81),(39,-40),(39,40),(0,81),(-39,40),(-39,-40),(0,0)]
+    for row in range(5):
+        span=3564 if row<4 else 1188
+        center=row*3564+span/2
+        observed=[]
+        for dx,dy in points:
+            theta=(center+dx)/15444*2*np.pi
+            radius=outer-(150+dy)/300*(outer-inner)
+            x=int(1000+np.sin(theta)*radius); y=int(1000-np.cos(theta)*radius)
+            observed.append(int(np.max(ring[y,x,:3])<40))
+        assert tuple(observed)==digits[row], f'Drawing numeral {row+1} is mirrored on ring: {observed}'
+    ring,_=renderer.render(scene,2000,2000,1,overrides={'testPattern':2})
+    # At twelve o'clock, the outer band is farther UP; the inner band is toward the center.
+    outer_y=int(1000-(outer-0.04*(outer-inner)))
+    inner_y=int(1000-(inner+0.04*(outer-inner)))
+    assert np.array_equal(ring[outer_y,1000,:3],[0,0,255])
+    assert np.array_equal(ring[inner_y,1000,:3],[255,0,0])
+    corona=next(s for s in MANIFEST['scenes'] if s['id']=='04_electric_corona')
+    low,_=renderer.render(corona,15444,300,0,seconds=18,overrides={'rootGlow':0})
+    high,_=renderer.render(corona,15444,300,0,seconds=18,overrides={'rootGlow':2})
+    delta=np.maximum(high[:,:,:3].astype(float)-low[:,:,:3],0)
+    assert delta[150:].sum()/delta.sum()>.98, 'Corona inner glow must land in bottom/inner half of source'
+    print('PASS supplied layout: clockwise 1–5, upright ring glyphs, physical radial bands and corona inner glow',flush=True)
 
 def main():
     renderer=MetalRenderer();results=[]
@@ -170,6 +201,7 @@ constant {namespace}::OrbitParams& p [[buffer(1)]], uint i [[thread_position_in_
         if pattern==6: assert not img[:,:,:3].any()
         if pattern==9: assert set(np.unique(img[:1200,:3564,:3]))=={0,255}
     validate_radial_patterns(renderer,calibration)
+    validate_layout_orientation(renderer,calibration)
     isf=validate_isf()
     report={'device':str(renderer.device.name()),'metalFastMath':False,'metal':results,
             'calibrationPatternsPassed':pattern_count,'isfGLSLCompilePassed':isf,

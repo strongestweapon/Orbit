@@ -21,7 +21,9 @@
   "coordinates": {
     "origin": "top-left",
     "u": "clockwise from twelve oclock",
-    "v": "inner to outer"
+    "v": "inner to outer",
+    "rasterY": "outer to inner (top to bottom)",
+    "reference": "layout-resolution.jpeg"
   },
   "uniformBuffer": {
     "sizeBytes": 96,

@@ -270,7 +270,9 @@ float orbitPresence(vec2 uv, OrbitParams p) {
     return arc * mix(1.0, pieces, p.fragmentation);
 }
 
-// Every view samples the same canonical ring. Packed view is always a 4K canvas.
+// Canonical shader/texture v runs inner -> outer. The supplied LED layout runs
+// raster top -> bottom from outer -> inner, with upright numerals facing the ring center.
+// Strip and packed output convert raster Y; ring preview keeps physical radial coordinates.
 vec3 orbitCoordinates(vec2 pixel, OrbitParams p) {
     vec2 size = vec2(p.outputWidth, p.outputHeight);
     vec2 uv = pixel / size;
@@ -280,7 +282,7 @@ vec3 orbitCoordinates(vec2 pixel, OrbitParams p) {
         float row = floor(q.y / 300.0);
         if (q.x >= 3564.0 || q.y >= 1500.0 || (row > 3.5 && q.x >= 1188.0))
             return vec3(0.0);
-        uv = vec2((row * 3564.0 + q.x) / 15444.0, fract(q.y / 300.0));
+        uv = vec2((row * 3564.0 + q.x) / 15444.0, 1.0 - fract(q.y / 300.0));
     } else if (p.viewMode > 0.5) {
         vec2 q = pixel - size * 0.5;
         float outer = min(size.x, size.y) * 0.34722222;
@@ -291,6 +293,8 @@ vec3 orbitCoordinates(vec2 pixel, OrbitParams p) {
         if (coverage <= 0.0) return vec3(0.0);
         uv = vec2(fract(ORBIT_ATAN(q.x, -q.y) / ORBIT_TAU),
                   clamp((r - inner) / (outer - inner), 0.0, 1.0));
+    } else {
+        uv.y = 1.0 - uv.y;
     }
     uv.x = fract((p.flipU > 0.5 ? -uv.x : uv.x) + p.angleOffset);
     uv.y = p.flipV > 0.5 ? 1.0 - uv.y : uv.y;

@@ -1,6 +1,16 @@
 import SwiftUI
 
-private let orbitAccent = Color(red:0.64,green:0.92,blue:0.64)
+// Blue marks filled controls and selection; text on dark surfaces stays readable.
+let orbitAccent = Color(.sRGB,red:0,green:0,blue:1,opacity:1)
+
+struct OrbitSecondaryButtonStyle: PrimitiveButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Button(configuration)
+            .buttonStyle(.bordered)
+            .tint(configuration.role == .destructive ? .red : .white)
+    }
+}
+
 private let orbitPanel = Color(white:0.085)
 private let orbitBrandImage = Bundle.main.url(forResource:"OrbitLogo",withExtension:"png")
     .flatMap { NSImage(contentsOf:$0) }
@@ -36,6 +46,7 @@ struct ContentView: View {
                     }
                     if model.selectedScene?.testScene == false {
                         Toggle("원본 비교",isOn:$model.showReference).toggleStyle(.button).controlSize(.small)
+                            .tint(model.showReference ? orbitAccent : .white)
                     }
                 }.frame(height:30)
                 if model.previewsEnabled {
@@ -69,7 +80,8 @@ struct ContentView: View {
             }
             footer
         }
-        .background(Color(white:0.045)).tint(orbitAccent)
+        .background(Color(white:0.045)).tint(orbitAccent).accentColor(orbitAccent)
+        .buttonStyle(OrbitSecondaryButtonStyle())
         .sheet(item:$panel) { selected in
             if selected == .performance {
                 PerformanceView(model:model,measurement:model.performance) { panel=nil }
@@ -124,7 +136,7 @@ struct ContentView: View {
                     if model.selectedSceneID != scene.id {model.selectedSceneID=scene.id}
                 } label:{
                     HStack(spacing:7) {
-                        Text(String(format:"%02d",i+1)).font(.system(size:9,design:.monospaced)).foregroundStyle(model.selectedSceneID==scene.id ? orbitAccent : .secondary)
+                        Text(String(format:"%02d",i+1)).font(.system(size:9,design:.monospaced)).foregroundStyle(model.selectedSceneID==scene.id ? Color.white : .secondary)
                         Text(scene.name.replacingOccurrences(of:" ",with:"\n")).font(.system(size:11,weight:.medium)).multilineTextAlignment(.leading).lineLimit(2)
                         Spacer(minLength:0)
                     }.padding(.horizontal,9).frame(maxWidth:.infinity).frame(height:47)
@@ -177,7 +189,7 @@ struct ContentView: View {
                     if [2,10,11].contains(Int(model.value("testPattern"))) {
                         VStack(alignment:.leading,spacing:4) {
                             Text("1–5 구간별 고유색 · 안쪽 빨강 띠 · 바깥쪽 파랑 띠")
-                            Text(model.value("flipV") > 0.5 ? "안팎 반전 켜짐 · 색과 표식 위치가 뒤집힙니다" : "펼친 LED 영상: 각 줄 위 = 안쪽 · 아래 = 바깥쪽")
+                            Text(model.value("flipV") > 0.5 ? "안팎 반전 켜짐 · 색과 표식 위치가 뒤집힙니다" : "도면 기준: 각 줄 위 = 바깥쪽 파랑 · 아래 = 안쪽 빨강")
                                 .foregroundStyle(.secondary)
                         }.font(.system(size:11)).accessibilityIdentifier("radialTestLegend")
                     }
@@ -237,7 +249,8 @@ private struct OrbitSettingsPanel: View {
                 if panel == .look {Button("연출 기본값 복원"){model.resetSceneAppearance()}}
                 Spacer();Button("닫기",action:close).keyboardShortcut(.defaultAction)
             }.padding(16)
-        }.frame(width:640,height:520).background(Color(white:0.07)).tint(orbitAccent)
+        }.frame(width:640,height:520).background(Color(white:0.07)).tint(orbitAccent).accentColor(orbitAccent)
+            .buttonStyle(OrbitSecondaryButtonStyle())
             .onAppear {
                 selectedSensor=initialSensorID ?? model.sensors.first?.id
                 sensorPage=(model.sensors.firstIndex {$0.id==selectedSensor} ?? 0)/6
