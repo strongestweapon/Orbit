@@ -75,7 +75,7 @@ def contact_sheet(renderer,output):
         sheet.paste(image,(x+104,y))
         draw.text((x+22,y+259),scene['name'],font=font,fill='#eceef5')
         ref=scene['referenceSeconds']
-        text=f'Reference {ref[0]}-{ref[1]}s' if ref else ('10 calibration patterns' if scene['testScene'] else 'Provided still reference')
+        text=f'Reference {ref[0]}-{ref[1]}s' if ref else (f"{len(MANIFEST['testPatterns'])} calibration patterns" if scene['testScene'] else 'Provided still reference')
         draw.text((x+22,y+283),text,font=small,fill='#aeb4c3')
     sheet.save(output)
 

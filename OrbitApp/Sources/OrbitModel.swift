@@ -27,36 +27,54 @@ struct StoredSettings: Codable {
     var rendererRevision: Int?
     var outputResolution: OutputResolution?
     var customOutputWidth: Int?
+    var installation: InstallationSettings?
+    var globalOSC: [GlobalOSCMapping]?
 }
 struct OutputDisplay: Identifiable {
     let id: UInt32
     let name: String
     let pixels: String
     let isMain: Bool
+    let uuid: String
 }
 
 final class OrbitModel: ObservableObject {
     @Published var scenes: [SceneDescriptor] = []
     @Published var selectedSceneID = "07_spectral_fragments" {
-        didSet { comparison.stop(); textureSource?.reset(); textureStatus = "텍스처 준비 중"; restartPlayback(); resetParameterState() }
+        didSet { comparison.stop(); textureSource?.reset(); textureStatus = "텍스처 준비 중"; restartPlayback(); resetParameterState(); scheduleSave() }
     }
     @Published var settings: [String: SceneSettings] = [:]
     @Published var sensors = [
         SensorInput(name: "레이싱 속도", address: "/park/racing/speed"),
-        SensorInput(name: "관람객 수", address: "/park/visitors", maximum: 500)
+        SensorInput(name: "관람객 수", address: "/park/visitors")
     ]
-    @Published var port = "9000"
+    @Published var port = "9000" { didSet { scheduleSave() } }
     @Published var oscState = "수신 꺼짐"
     @Published var oscRunning = false
     @Published var lastMessage = "OSC 데이터 대기"
-    @Published var playing = true { didSet { lastTime = CACurrentMediaTime() } }
-    @Published var frameRate: PlaybackFrameRate = .sixty
+    @Published var playing = true { didSet { lastTime = CACurrentMediaTime(); scheduleSave() } }
+    @Published var frameRate: PlaybackFrameRate = .sixty { didSet { scheduleSave() } }
+    @Published var previewPolicy: PreviewPolicy = .always {
+        didSet { if !previewsEnabled { comparison.stop(); previewSurfaces.removeAll(); previewRate.reset() }; scheduleSave() }
+    }
+    @Published var resumeOnLaunch = true { didSet { scheduleSave() } }
+    @Published var globalOSC: [GlobalOSCMapping] = [] { didSet { scheduleSave() } }
+    @Published private(set) var globalReceipts: [UUID:OSCReceipt] = [:]
     @Published var showReference = false {
         didSet { if showReference { restartPlayback() } else { comparison.stop() } }
     }
     @Published var errorMessage: String?
     @Published var displays: [OutputDisplay] = []
-    @Published var selectedDisplayID: UInt32 = 0
+    @Published var selectedDisplayID: UInt32 = 0 {
+        didSet {
+            guard !refreshingDisplays, !restoringSettings else { return }
+            preferredDisplayUUID = displays.first { $0.id == selectedDisplayID }?.uuid
+            displayFallback = false
+            if oldValue != selectedDisplayID { stopOutput() }
+            scheduleSave()
+        }
+    }
+    @Published private(set) var displayFallback = false
     @Published var outputActive = false
     @Published private(set) var outputOpen = false
     @Published private(set) var outputFullscreen = false
@@ -71,6 +89,7 @@ final class OrbitModel: ObservableObject {
         didSet {
             if updateInstallationInProgress && controlOutputEnabled { controlOutputEnabled = false }
             controlOutput.reset(); controlOutputStatus = controlOutputEnabled ? "제어 송신 대기" : "제어 자동 송신 꺼짐"
+            scheduleSave()
         }
     }
     var updateInstallationInProgress = false
@@ -95,6 +114,17 @@ final class OrbitModel: ObservableObject {
     private var displayObserver: NSObjectProtocol?
     private var heartbeat: Timer?
     private var saves = Set<AnyCancellable>()
+    private var restoringSettings = true
+    private var refreshingDisplays = false
+    private var preferredDisplayUUID: String?
+    private var startupSession: InstallationSettings?
+    private var sessionRestored = false
+    private var pendingSave: DispatchWorkItem?
+    private var oscSessionID = UUID()
+    private(set) var isShuttingDown = false
+    private let defaults: UserDefaults
+    private let resources: Bundle
+    var previewsEnabled: Bool { previewPolicy.renders(outputOpen:outputOpen,fullscreen:outputFullscreen) }
 
     var selectedScene: SceneDescriptor? { scenes.first { $0.id == selectedSceneID } }
     var activeSettings: SceneSettings {
@@ -161,17 +191,24 @@ final class OrbitModel: ObservableObject {
     var customOutputHeight: Int { OutputGeometry.normalizedWidth(customOutputWidth)/16*9 }
     func normalizeOutputWidth() { customOutputWidth = OutputGeometry.normalizedWidth(customOutputWidth) }
 
-    init() {
+    init(defaults: UserDefaults = .standard, resources: Bundle = .main) {
+        self.defaults = defaults; self.resources = resources
         do {
-            guard let url = Bundle.main.url(forResource: "scenes", withExtension: "json", subdirectory: "config") else {
+            guard let url = resources.url(forResource: "scenes", withExtension: "json", subdirectory: "config") else {
                 throw NSError(domain: "Orbit", code: 1, userInfo: [NSLocalizedDescriptionKey: "씬 목록이 앱에 포함되지 않았습니다."])
             }
             let manifest = try JSONDecoder().decode(SceneManifest.self, from: Data(contentsOf: url))
             scenes = manifest.scenes.filter { !$0.testScene } + manifest.scenes.filter { $0.testScene }
             for scene in scenes { settings[scene.id] = SceneSettings(values: scene.defaults, speed: scene.defaultClockSpeed) }
-            if let data = UserDefaults.standard.data(forKey: "OrbitSettings.v1"),
+            globalOSC = scenes.map { GlobalOSCMapping(address:"/orbit/scene/"+$0.id, action:.scene, sceneID:$0.id) }
+                + [GlobalOSCMapping(address:"/orbit/scene/next",action:.next),
+                   GlobalOSCMapping(address:"/orbit/scene/previous",action:.previous),
+                   GlobalOSCMapping(address:"/orbit/restart",action:.restart),
+                   GlobalOSCMapping(address:"/orbit/play",action:.play),
+                   GlobalOSCMapping(address:"/orbit/pause",action:.pause)]
+            if let data = defaults.data(forKey: "OrbitSettings.v1"),
                let stored = try? JSONDecoder().decode(StoredSettings.self, from: data) {
-                sensors = stored.sensors.map { var s = $0; s.receivedAt = nil; return s }
+                sensors = stored.sensors.map { var s = $0; s.receivedAt = nil; s.value = nil; s.minimum = 0; s.maximum = 1; return s }
                 for (key, storedValue) in stored.scenes where settings[key] != nil {
                     var value = storedValue
                     value.migrateRoutes(scene:key)
@@ -206,6 +243,14 @@ final class OrbitModel: ObservableObject {
                 port = stored.port
                 outputResolution = stored.outputResolution ?? .automatic
                 customOutputWidth = OutputGeometry.normalizedWidth(stored.customOutputWidth ?? 1920)
+                globalOSC = stored.globalOSC ?? globalOSC
+                startupSession = stored.installation
+                preferredDisplayUUID = stored.installation?.displayUUID
+                if let id = stored.installation?.selectedSceneID, scenes.contains(where: { $0.id == id }) { selectedSceneID = id }
+                if let rate = stored.installation?.frameRate { frameRate = PlaybackFrameRate(rawValue:rate) ?? .sixty }
+                previewPolicy = stored.installation?.previewPolicy ?? .always
+                playing = stored.installation?.playing ?? true
+                resumeOnLaunch = stored.installation?.resumeOnLaunch ?? true
             }
         } catch { errorMessage = error.localizedDescription }
         for key in Array(settings.keys) { settings[key]?.migrateRoutes(scene:key) }
@@ -235,7 +280,6 @@ final class OrbitModel: ObservableObject {
         $outputResolution.combineLatest($customOutputWidth).dropFirst()
             .debounce(for: .milliseconds(400), scheduler: RunLoop.main)
             .sink { [weak self] _ in self?.save() }.store(in: &saves)
-        $selectedDisplayID.dropFirst().removeDuplicates().sink { [weak self] _ in self?.stopOutput() }.store(in: &saves)
         controlOutput.onStatus = { [weak self] status in
             DispatchQueue.main.async {
                 guard let self else { return }
@@ -255,14 +299,63 @@ final class OrbitModel: ObservableObject {
             self.refreshParameters(delta:max(0,now-self.lastControlTime)); self.lastControlTime = now
         }
         RunLoop.main.add(timer,forMode:.common); controlTimer = timer
+        restoringSettings = false
     }
 
+    private func scheduleSave() {
+        guard !restoringSettings, !isShuttingDown else { return }
+        pendingSave?.cancel()
+        let item = DispatchWorkItem { [weak self] in self?.save() }
+        pendingSave = item
+        DispatchQueue.main.asyncAfter(deadline:.now()+0.25,execute:item)
+    }
     func save() {
-        let data = try? JSONEncoder().encode(StoredSettings(sensors: sensors, scenes: settings, port: port, motionRevision: 2, rendererRevision: 3, outputResolution: outputResolution, customOutputWidth: customOutputWidth))
-        if let data { UserDefaults.standard.set(data, forKey: "OrbitSettings.v1") }
+        guard !restoringSettings, !isShuttingDown else { return }
+        let installation = InstallationSettings(displayUUID:preferredDisplayUUID,selectedSceneID:selectedSceneID,
+            frameRate:frameRate.rawValue,previewPolicy:previewPolicy,playing:playing,resumeOnLaunch:resumeOnLaunch,
+            oscReceiving:oscRunning,controlSending:controlOutputEnabled,outputOpen:outputOpen,outputFullscreen:outputFullscreen)
+        let persistedSensors = sensors.map { sensor -> SensorInput in
+            var s = sensor; s.value = nil; s.receivedAt = nil; return s
+        }
+        let data = try? JSONEncoder().encode(StoredSettings(sensors: persistedSensors, scenes: settings, port: port, motionRevision: 2, rendererRevision: 3, outputResolution: outputResolution, customOutputWidth: customOutputWidth, installation:installation, globalOSC:globalOSC))
+        if let data { defaults.set(data, forKey: "OrbitSettings.v1") }
+    }
+    func restoreSessionOnce() {
+        guard !sessionRestored, !isShuttingDown else { return }; sessionRestored = true
+        guard resumeOnLaunch, let session = startupSession else { return }
+        startupSession = nil
+        if session.oscReceiving == true { startOSC() }
+        controlOutputEnabled = session.controlSending ?? false
+        if session.outputOpen == true {
+            startOutput()
+            if session.outputFullscreen == true {
+                DispatchQueue.main.async { [weak self] in self?.toggleOutputFullscreen() }
+            }
+        }
     }
     func value(_ name: String) -> Float { Float(parameterValues[name] ?? Double(effectiveValues[name] ?? 0)) }
     func baseParameterValue(_ key: String) -> Double { key == "speed" ? Double(manualPlaybackSpeed) : Double(effectiveValues[key] ?? 0) }
+    func normalizedParameterValue(_ key: String) -> Double {
+        parameterSpec(key).normalized(parameterValues[key] ?? baseParameterValue(key))
+    }
+    func setNormalizedParameterValue(_ key: String, _ value: Double) {
+        let raw = Float(parameterSpec(key).rawValue(normalized:value))
+        if key == "speed" { setSpeed(raw) } else { setValue(key,raw) }
+    }
+    /// Snapshot the live session before cleanup so reopening can restore it. Cleanup must not save an empty session.
+    func shutdownForTermination() {
+        guard !isShuttingDown else { return }
+        save(); isShuttingDown = true
+        pendingSave?.cancel(); pendingSave = nil; saves.removeAll()
+        controlTimer?.invalidate(); controlTimer = nil
+        heartbeat?.invalidate(); heartbeat = nil
+        if let displayObserver { NotificationCenter.default.removeObserver(displayObserver); self.displayObserver = nil }
+        performance.cancel()
+        stopOSC(); receiver.onMessage = nil; receiver.onState = nil
+        controlOutputEnabled = false
+        comparison.stop(); textureSource?.reset()
+        stopOutput()
+    }
     func setValue(_ name: String, _ value: Float) {
         guard value.isFinite else { return }
         let key = usesTexture && textureDefaults[name] != nil ? "texture." + name : name
@@ -362,25 +455,59 @@ final class OrbitModel: ObservableObject {
         sensors.append(SensorInput(name: "센서 \(sensors.count + 1)", address: "/park/sensor/\(sensors.count + 1)"))
     }
     func startOSC() {
+        guard !isShuttingDown else { return }
         guard let number = UInt16(port), number > 0 else { errorMessage = "UDP 포트는 1–65535 범위여야 합니다."; return }
+        let session=UUID();oscSessionID=session
         receiver.onState = { [weak self] running, message in
-            DispatchQueue.main.async { self?.oscRunning = running; self?.oscState = message }
+            DispatchQueue.main.async {
+                guard let self, self.oscSessionID == session else { return }
+                self.oscRunning = running; self.oscState = message; self.scheduleSave()
+            }
         }
         receiver.onMessage = { [weak self] address, values in
             DispatchQueue.main.async {
-                guard let self else { return }
-                self.lastMessage = address + "  " + values.map { String(format: "%.2f", $0) }.joined(separator: ", ")
-                for i in self.sensors.indices where self.sensors[i].address == address {
-                    let argument = self.sensors[i].argument
-                    if values.indices.contains(argument), values[argument].isFinite {
-                        self.sensors[i].value = values[argument]; self.sensors[i].receivedAt = Date()
-                    }
-                }
+                guard let self, self.oscSessionID == session else { return }
+                self.receiveOSC(address:address,values:values)
             }
         }
         receiver.start(port: number); save()
     }
-    func stopOSC() { receiver.stop(); oscRunning = false; oscState = "수신 꺼짐" }
+    func stopOSC() { oscSessionID=UUID();receiver.stop(); oscRunning = false; oscState = "수신 꺼짐"; scheduleSave() }
+
+    func receiveOSC(address: String, values: [Double]) {
+        guard !isShuttingDown else { return }
+        lastMessage = address + "  " + values.map { OSCValue.normalized($0).map { String(format:"%.2f",$0) } ?? "실수 필요" }.joined(separator:", ")
+        for i in sensors.indices where sensors[i].address == address {
+            let argument = sensors[i].argument
+            if values.indices.contains(argument), let value = OSCValue.normalized(values[argument]) {
+                sensors[i].value = value; sensors[i].receivedAt = Date()
+            }
+        }
+        // Iterate messages, not changed values: repeated high cues must restart again.
+        for route in globalOSC where route.address == address && route.isValid {
+            guard values.indices.contains(route.argument), let value = OSCValue.normalized(values[route.argument]) else { continue }
+            let fires = route.accepts(address:address,values:values)
+            let count = globalReceipts[route.id]?.triggerCount ?? 0
+            globalReceipts[route.id] = OSCReceipt(value:value,receivedAt:Date(),triggerCount:count+(fires ? 1 : 0))
+            if fires { performGlobalAction(route) }
+        }
+    }
+    func performGlobalAction(_ route: GlobalOSCMapping) {
+        switch route.action {
+        case .scene:
+            guard let id = route.sceneID, scenes.contains(where: { $0.id == id }) else { return }
+            selectedSceneID = id; playing = true
+        case .next, .previous:
+            let sequence = scenes.filter { !$0.testScene }
+            guard !sequence.isEmpty else { return }
+            let index = sequence.firstIndex { $0.id == selectedSceneID } ?? (route.action == .next ? -1 : 0)
+            selectedSceneID = sequence[(index+(route.action == .next ? 1 : -1)+sequence.count)%sequence.count].id
+            playing = true
+        case .restart: textureSource?.reset(); restartPlayback(); playing = true
+        case .play: playing = true
+        case .pause: playing = false
+        }
+    }
 
     func registerPreview(mode: Float, size: CGSize) {
         let width=Int(size.width),height=Int(size.height)
@@ -418,13 +545,13 @@ final class OrbitModel: ObservableObject {
         if playing { phaseTime += delta * Double(speed) }
         if usesTexture, let scene = selectedScene, let original = scene.texture {
             let texture = original
-            if let url = Bundle.main.url(forResource: texture.file, withExtension: nil, subdirectory: "textures") {
+            if let url = resources.url(forResource: texture.file, withExtension: nil, subdirectory: "textures") {
                 textureSource?.request(sceneID:scene.id,descriptor:texture,url:url,seconds:phaseTime)
             } else if textureStatus != "텍스처 파일 없음" {
                 DispatchQueue.main.async { self.textureStatus = "텍스처 파일 없음"; self.errorMessage = "앱에 추출 텍스처가 포함되지 않았습니다." }
             }
         }
-        if showReference, let scene = selectedScene, scene.referenceImage == nil,
+        if showReference && previewsEnabled, let scene = selectedScene, scene.referenceImage == nil,
            let range = scene.referenceSeconds, range.count == 2 {
             let duration = max(1, range[1] - range[0] - 2)
             comparison.sync(scene: scene, seconds: phaseTime.truncatingRemainder(dividingBy:duration), playing: playing, speed: speed)
@@ -455,23 +582,33 @@ final class OrbitModel: ObservableObject {
         }
     }
     func refreshDisplays() {
+        guard !isShuttingDown else { return }
+        refreshingDisplays = true
+        defer { refreshingDisplays = false }
         displays = NSScreen.screens.compactMap { screen in
             guard let n = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else { return nil }
             let id = n.uint32Value
             return OutputDisplay(id: id, name: screen.localizedName,
-              pixels: "\(CGDisplayPixelsWide(id)) × \(CGDisplayPixelsHigh(id))", isMain: screen == NSScreen.main)
+              pixels: "\(CGDisplayPixelsWide(id)) × \(CGDisplayPixelsHigh(id))", isMain: screen == NSScreen.main,
+              uuid: CGDisplayCreateUUIDFromDisplayID(id).map { CFUUIDCreateString(nil,$0.takeRetainedValue()) as String } ?? "display-\(id)")
         }
-        if selectedDisplayID != 0 && !displays.contains(where: { $0.id == selectedDisplayID }) {
-            stopOutput(); selectedDisplayID = 0; outputStatus = "디스플레이 연결 해제 · 현재 화면 사용 가능"
+        let missing = selectedDisplayID != 0 && !displays.contains { $0.id == selectedDisplayID }
+        let reopen = missing && outputOpen
+        let wasFullscreen = outputFullscreen
+        selectedDisplayID = displays.first { $0.uuid == preferredDisplayUUID }?.id ?? 0
+        displayFallback = preferredDisplayUUID != nil && selectedDisplayID == 0
+        if reopen {
+            startOutput()
+            if wasFullscreen { DispatchQueue.main.async { [weak self] in self?.toggleOutputFullscreen() } }
         }
     }
     func startOutput() {
-        guard !performance.isRunning, !updateInstallationInProgress else { return }
+        guard !isShuttingDown, !performance.isRunning, !updateInstallationInProgress else { return }
         stopOutput()
         let currentScreen = NSApp.keyWindow?.screen ?? NSApp.mainWindow?.screen ?? NSScreen.main
-        let screen = selectedDisplayID == 0 ? currentScreen : NSScreen.screens.first(where: {
+        let screen = (selectedDisplayID == 0 ? currentScreen : NSScreen.screens.first(where: {
             ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value == selectedDisplayID
-        })
+        })) ?? currentScreen ?? NSScreen.screens.first
         guard let screen else { errorMessage = "출력할 화면을 찾을 수 없습니다."; return }
         let controller = OrbitOutputWindowController(model: self, screen: screen,
                             resolution: outputResolution, customWidth: customOutputWidth)
@@ -489,14 +626,16 @@ final class OrbitModel: ObservableObject {
             DispatchQueue.main.async {
                 guard let self, self.outputController?.sessionID == session else { return }
                 if self.outputFullscreen != fullscreen { self.outputFullscreen = fullscreen }
+                if !self.previewsEnabled { self.comparison.stop(); self.previewSurfaces.removeAll(); self.previewRate.reset() }
                 if self.outputScreenName != name { self.outputScreenName = name }
                 if self.outputRenderSize != size { self.outputRenderSize = size }
                 if self.outputActive { self.outputStatus = "LIVE · \(name)" }
+                self.scheduleSave()
             }
         }
-        controller.open()
+        controller.open(); scheduleSave()
     }
-    func toggleOutputFullscreen() { outputController?.toggleFullscreen() }
+    func toggleOutputFullscreen() { if !isShuttingDown { outputController?.toggleFullscreen() } }
     func stopOutput() {
         let controller = outputController; outputController = nil
         controller?.shutdown(); clearOutputState()
@@ -505,6 +644,7 @@ final class OrbitModel: ObservableObject {
         outputRate.reset(); telemetry.resetOutput(); outputPresentationTime = 0
         outputActive = false; outputOpen = false; outputFullscreen = false
         outputRenderSize = .zero; outputScreenName = ""; outputStatus = "출력 꺼짐"
+        scheduleSave()
     }
     deinit {
         controlTimer?.invalidate(); heartbeat?.invalidate()

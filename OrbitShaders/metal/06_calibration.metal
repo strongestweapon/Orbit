@@ -144,6 +144,23 @@ float orbitDigit(vec2 p, float n) {
     if (n < 4.5) return max(max(f,g),max(b,c));
     return max(max(a,f),max(max(g,c),d));
 }
+vec3 orbitRadialTest(vec2 uv, float mode) {
+    // Three numbers per long segment, one in the short fifth segment.
+    float sector = min(floor(min(uv.x * 15444.0,15443.999) / 3564.0),4.0) + 1.0;
+    // Segment colors identify 1–5; narrow edge bands identify inner/outer.
+    vec3 col = orbitHsv((sector - 1.0) * 0.18 + 0.55, 0.45, 0.80);
+    float x = fract(uv.x * 13.0) * 1188.0 - 594.0;
+    bool innerOnly = mode > 9.5 && mode < 10.5;
+    bool outerOnly = mode > 10.5;
+    if ((innerOnly && uv.y >= 0.48) || (outerOnly && uv.y <= 0.52)) return vec3(0);
+    // 24 of 300 logical pixels (8%) per edge; scales with output resolution.
+    if (uv.y < 0.08) return vec3(1,0,0);
+    if (uv.y >= 0.92) return vec3(0,0,1);
+    float center = innerOnly ? 75.0 : (outerOnly ? 225.0 : 150.0);
+    float scale = innerOnly || outerOnly ? 150.0 : 300.0;
+    float number = orbitDigit(vec2(x,uv.y * 300.0 - center) / scale,sector);
+    return mix(col,vec3(0.03),number);
+}
 vec3 orbitShade(vec2 uv, OrbitParams p) {
     float s = min(uv.x * 15444.0, 15443.999);
     float sector = min(floor(s / 3564.0), 4.0);
@@ -165,7 +182,7 @@ vec3 orbitShade(vec2 uv, OrbitParams p) {
                          1.0-step(1.0, fract(uv.y*300.0/50.0)*50.0));
         return mix(vec3(0.02),vec3(0.9),line);
     }
-    if (mode < 2.5) return uv.y < 0.12 ? vec3(1,0,0) : (uv.y > 0.88 ? vec3(0,0,1) : vec3(0.2));
+    if (mode < 2.5) return orbitRadialTest(uv,mode);
     if (mode < 3.5) return uv.x < 1.0/3.0 ? vec3(1,0,0) : (uv.x < 2.0/3.0 ? vec3(0,1,0) : vec3(0,0,1));
     if (mode < 4.5) return vec3(min(floor(uv.x*16.0),15.0)/15.0);
     if (mode < 5.5) return vec3(1.0);
@@ -178,7 +195,8 @@ vec3 orbitShade(vec2 uv, OrbitParams p) {
         float seam = min(local,span-local);
         return seam < 3.0 ? vec3(1.0) : vec3(0.03);
     }
-    return vec3(fract((floor(s)+floor(uv.y*300.0))*0.5)*2.0);
+    if (mode < 9.5) return vec3(fract((floor(s)+floor(uv.y*300.0))*0.5)*2.0);
+    return orbitRadialTest(uv,mode);
 }
 
 

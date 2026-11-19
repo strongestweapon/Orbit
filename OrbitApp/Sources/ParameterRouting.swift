@@ -6,7 +6,7 @@ struct SensorInput: Identifiable, Codable {
     var address: String
     var argument = 0
     var minimum: Double = 0
-    var maximum: Double = 100
+    var maximum: Double = 1
     var value: Double?
     var receivedAt: Date?
 
@@ -53,6 +53,15 @@ struct ParameterSpec: Identifiable {
     func clamp(_ value: Double) -> Double {
         let number = value.isFinite ? min(range.upperBound,max(range.lowerBound,value)) : range.lowerBound
         return isSwitch ? (number >= 0.5 ? 1 : 0) : number
+    }
+    /// Operator controls and OSC use 0...1. Stored values and GPU uniforms retain their native range.
+    func normalized(_ value: Double) -> Double {
+        guard range.upperBound > range.lowerBound else { return 0 }
+        return min(1,max(0,(clamp(value)-range.lowerBound)/(range.upperBound-range.lowerBound)))
+    }
+    func rawValue(normalized value: Double) -> Double {
+        let unit = value.isFinite ? min(1,max(0,value)) : 0
+        return clamp(range.lowerBound+unit*(range.upperBound-range.lowerBound))
     }
 }
 
@@ -135,7 +144,7 @@ struct ParameterOutputRoute: Codable, Equatable {
     }
     func mappedValue(_ value: Double, spec: ParameterSpec) -> Double? {
         guard validationError == nil, value.isFinite else { return nil }
-        let n = (spec.clamp(value)-spec.range.lowerBound)/(spec.range.upperBound-spec.range.lowerBound)
+        let n = spec.normalized(value)
         let result = minimum + n*(maximum-minimum)
         return transport == .midi ? result.rounded() : result
     }
@@ -203,13 +212,12 @@ struct ParameterResolver {
             var target = fallback
             if let sensor = sensors.first(where: { $0.id == route.sensorID }),
                let value = sensor.value, value.isFinite, let received = sensor.receivedAt,
-               now.timeIntervalSince(received) < 90, sensor.maximum > sensor.minimum,
-               sensor.minimum.isFinite, sensor.maximum.isFinite,
+               now.timeIntervalSince(received) < 90,
                route.minimum.isFinite, route.maximum.isFinite {
-                let n = min(1,max(0,(value-sensor.minimum)/(sensor.maximum-sensor.minimum)))
+                let n = min(1,max(0,value))
                 target = spec.clamp(route.minimum+n*(route.maximum-route.minimum))
             }
-            let seconds = route.smoothingSeconds.isFinite ? max(0,route.smoothingSeconds) : 0
+            let seconds = !spec.isSwitch && route.smoothingSeconds.isFinite ? max(0,route.smoothingSeconds) : 0
             let blend = seconds == 0 ? 1 : 1-exp(-max(0,delta)*3/seconds)
             let prior = smoothed[spec.id] ?? fallback
             let value = prior+(target-prior)*blend

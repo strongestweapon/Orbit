@@ -34,7 +34,7 @@ final class OrbitMTKView: MTKView {
 }
 
 struct OrbitMetalView: NSViewRepresentable {
-    let model: OrbitModel
+    @ObservedObject var model: OrbitModel
     let mode: Float
     static func make(model: OrbitModel, mode: Float, isOutput: Bool = false, outputSession: UUID? = nil) -> OrbitMTKView {
         let view = OrbitMTKView(frame: .zero, device: OrbitGPU.shared.device)
@@ -50,7 +50,10 @@ struct OrbitMetalView: NSViewRepresentable {
         return view
     }
     func makeNSView(context: Context) -> OrbitMTKView { Self.make(model: model, mode: mode) }
-    func updateNSView(_ view: OrbitMTKView, context: Context) {}
+    func updateNSView(_ view: OrbitMTKView, context: Context) {
+        view.renderer?.setViewMode(mode)
+        view.isPaused = !model.previewsEnabled
+    }
     static func dismantleNSView(_ view: OrbitMTKView, coordinator: ()) {
         view.isPaused = true; view.delegate = nil; view.renderer = nil
     }
@@ -58,16 +61,18 @@ struct OrbitMetalView: NSViewRepresentable {
 
 final class OrbitRenderer: NSObject, MTKViewDelegate {
     private weak var model: OrbitModel?
-    private let mode: Float
+    private var mode: Float
     private let isOutput: Bool
     private let outputSession: UUID?
     private var failedScene: String?
     init(model: OrbitModel, mode: Float, isOutput: Bool, outputSession: UUID? = nil) {
-        self.model = model; self.mode = mode; self.isOutput = isOutput; self.outputSession = outputSession
+        self.model = model; self.mode = RenderViewMode.resolved(mode,isOutput:isOutput); self.isOutput = isOutput; self.outputSession = outputSession
     }
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
+    func setViewMode(_ requested: Float) { mode = RenderViewMode.resolved(requested,isOutput:isOutput) }
     func draw(in view: MTKView) {
-        guard let model, !model.performance.isRunning else { return }
+        guard let model, !model.isShuttingDown, !model.performance.isRunning else { return }
+        guard isOutput || model.previewsEnabled else { return }
         let target=model.frameRate.target(screenMaximum:view.window?.screen?.maximumFramesPerSecond ?? 60)
         if view.preferredFramesPerSecond != target { view.preferredFramesPerSecond = target }
         if !isOutput { model.registerPreview(mode:mode,size:view.drawableSize) }

@@ -55,6 +55,8 @@ final class OrbitOutputWindowController: NSWindowController, NSWindowDelegate {
                                       backing: .buffered, defer: false, screen: screen)
         super.init(window: window)
         window.isReleasedWhenClosed = false
+        // The model restores output deliberately; AppKit must not restore an orphan output window.
+        window.isRestorable = false
         window.title = "Orbit 출력"
         window.backgroundColor = .black
         // Keep the live output above the operator window even when its controls have focus.
@@ -89,7 +91,11 @@ final class OrbitOutputWindowController: NSWindowController, NSWindowDelegate {
     }
     @objc func toggleFullscreen(_ sender: Any? = nil) { window?.toggleFullScreen(sender) }
     func shutdown() {
-        outputView.stopRendering(); window?.delegate = nil; window?.close()
+        closed = nil; changed = nil; outputView.geometryChanged = nil
+        outputView.stopRendering()
+        window?.delegate = nil
+        window?.orderOut(nil)
+        window?.close()
     }
     private func reportState() {
         guard let window else { return }

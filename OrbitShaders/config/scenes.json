@@ -111,14 +111,16 @@
   "testPatterns": {
     "0": "Segments 1-5 + direction",
     "1": "100x50 pixel grid",
-    "2": "Inner red / outer blue",
+    "2": "Segment colors 1-5 + inner red / outer blue edges",
     "3": "RGB",
     "4": "16-step gray ramp",
     "5": "White",
     "6": "Black",
     "7": "Moving marker",
     "8": "Segment seams",
-    "9": "Single-pixel checker"
+    "9": "Single-pixel checker",
+    "10": "Inner only (segment colors + red edge)",
+    "11": "Outer only (segment colors + blue edge)"
   },
   "scenes": [
     {

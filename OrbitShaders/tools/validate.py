@@ -45,6 +45,49 @@ def validate_isf():
         gl.CGLSetCurrentContext(None);gl.CGLDestroyContext(ctx)
     return results
 
+def validate_radial_patterns(renderer, scene):
+    reference,_=renderer.render(scene,3840,2160,2,overrides={'testPattern':0})
+    colors=[reference[row*300+75,100,:3] for row in range(5)]
+    assert len({tuple(color) for color in colors})==5, 'Each segment must have a distinct color'
+    for pattern in (2,10,11):
+        packed,_=renderer.render(scene,3840,2160,2,overrides={'testPattern':pattern})
+        flipped,_=renderer.render(scene,3840,2160,2,overrides={'testPattern':pattern,'flipV':1})
+        for row in range(5):
+            width=3564 if row<4 else 1188
+            tile=packed[row*300:(row+1)*300,:width,:3]
+            # Both halves retain the original segment color; only isolated halves turn black.
+            assert np.array_equal(tile[75,100], colors[row] if pattern!=11 else [0,0,0])
+            assert np.array_equal(tile[225,100], colors[row] if pattern!=10 else [0,0,0])
+            assert np.all(tile[:24]==([255,0,0] if pattern!=11 else [0,0,0])), 'Inner edge must be 24 px red'
+            assert np.all(tile[276:]==([0,0,255] if pattern!=10 else [0,0,0])), 'Outer edge must be 24 px blue'
+            if pattern!=11: assert np.all(tile[24]==colors[row]), 'Inner band is too thick'
+            if pattern!=10: assert np.all(tile[275]==colors[row]), 'Outer band is too thick'
+            if pattern==10: assert not tile[150:].any(), 'Inner-only leaks into outer half'
+            if pattern==11: assert not tile[:150].any(), 'Outer-only leaks into inner half'
+            # Read the seven digit segments from rendered pixels, independently of shader code.
+            digits=[(0,1,1,0,0,0,0),(1,1,0,1,1,0,1),(1,1,1,1,0,0,1),
+                    (0,1,1,0,0,1,1),(1,0,1,1,0,1,1)]
+            points=([(0,-81),(39,-40),(39,40),(0,81),(-39,40),(-39,-40),(0,0)] if pattern==2
+                    else [(0,-40),(20,-20),(20,20),(0,40),(-20,20),(-20,-20),(0,0)])
+            # Every 1188-pixel module has its row number; no direction lettering remains.
+            for module in range(width//1188):
+                if pattern==2:
+                    assert np.all(tile[24:56]==colors[row]), 'Unexpected lettering above number'
+                    assert np.all(tile[244:276]==colors[row]), 'Unexpected lettering below number'
+                for center_y in ([150] if pattern==2 else [75] if pattern==10 else [225]):
+                    center_x=594
+                    segments=tuple(int(np.all(tile[center_y+dy,module*1188+center_x+dx]<12)) for dx,dy in points)
+                    assert segments==digits[row], f'Wrong segment number at row {row+1}, module {module+1}: {segments}'
+            reverse=flipped[row*300:(row+1)*300,:width,:3]
+            assert np.abs(reverse.astype(int)-tile[::-1].astype(int)).max()<=2, 'Radial flip mismatch'
+        assert not packed[1500:,:,:3].any() and not packed[:1500,3564:,:3].any()
+        ring,_=renderer.render(scene,800,800,1,overrides={'testPattern':pattern})
+        y,x=np.mgrid[:800,:800]; radius=np.hypot(x+.5-400,y+.5-400)
+        outer=800*.34722222; inner=outer*(1-scene['defaults']['ringWidth']); middle=(inner+outer)/2
+        if pattern==10: assert not ring[radius>middle,:3].any(), 'IN is not inside on ring preview'
+        if pattern==11: assert not ring[radius<middle,:3].any(), 'OUT is not outside on ring preview'
+    print('PASS five segment colors, numbers 1–5, 24 px red/blue edges, no IN/OUT lettering, isolated halves and radial flip',flush=True)
+
 def main():
     renderer=MetalRenderer();results=[]
     options=objc.lookUpClass('MTLCompileOptions').alloc().init();options.setFastMathEnabled_(False)
@@ -119,17 +162,19 @@ constant {namespace}::OrbitParams& p [[buffer(1)]], uint i [[thread_position_in_
         results.append({'scene':scene['id'],'packingMaxByteError':max(errors),'seamMaxFloatError':seam,'passed':True})
         print('PASS',scene['id'],flush=True)
     calibration=next(scene for scene in MANIFEST['scenes'] if scene['testScene'])
-    for pattern in range(10):
+    pattern_count=len(MANIFEST['testPatterns'])
+    for pattern in range(pattern_count):
         img,_=renderer.render(calibration,3840,2160,2,overrides={'testPattern':pattern})
         assert not img[1200:1500,1188:,:3].any()
         if pattern==5: assert np.all(img[:1200,:3564,:3]==255)
         if pattern==6: assert not img[:,:,:3].any()
         if pattern==9: assert set(np.unique(img[:1200,:3564,:3]))=={0,255}
+    validate_radial_patterns(renderer,calibration)
     isf=validate_isf()
     report={'device':str(renderer.device.name()),'metalFastMath':False,'metal':results,
-            'calibrationPatternsPassed':10,'isfGLSLCompilePassed':isf,
+            'calibrationPatternsPassed':pattern_count,'isfGLSLCompilePassed':isf,
             'milluminApplicationLoadTested':False,'hdmiOutputTested':False}
     (ROOT/'previews/validation.json').write_text(json.dumps(report,indent=2)+'\n')
-    print(f'PASS 10 calibration patterns and {len(isf)} ISF GLSL compiles',flush=True)
+    print(f'PASS {pattern_count} calibration patterns and {len(isf)} ISF GLSL compiles',flush=True)
 
 if __name__=='__main__':main()

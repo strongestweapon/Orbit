@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create a 4K/60 test video: nine static patterns, then one full marker revolution."""
+"""Create a 4K/60 test video: eleven static patterns, then one full marker revolution."""
 import subprocess
 from PIL import Image
 from render_metal import ROOT,MANIFEST,MetalRenderer
@@ -7,8 +7,8 @@ from render_metal import ROOT,MANIFEST,MetalRenderer
 def main():
     renderer=MetalRenderer();scene=next(s for s in MANIFEST['scenes'] if s['testScene'])
     folder=ROOT/'previews/test-patterns';folder.mkdir(exist_ok=True)
-    # 9 static patterns at two seconds each; moving marker at 0.08 turns/s for 12.5s.
-    order=[0,1,2,3,4,5,6,8,9]
+    # 11 static patterns at two seconds each; moving marker at 0.08 turns/s for 12.5s.
+    order=[0,1,2,10,11,3,4,5,6,8,9]
     dest=ROOT/'previews/LED-test-patterns-3840x2160-60fps.mp4'
     cmd=['ffmpeg','-hide_banner','-loglevel','error','-y','-f','rawvideo','-pixel_format','rgba',
       '-video_size','3840x2160','-framerate','60','-i','-','-an','-c:v','libx264','-preset','veryfast',

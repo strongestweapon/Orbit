@@ -31,6 +31,20 @@ def main():
             assert np.max(np.abs(color.astype(int) - reference[ref_y, ref_x, :3])) <= 1
         print(f'PASS: {width}×{height} — 5 segments, no clipping, opaque black padding')
 
+    # Every production scene must use the same LED packing, never ring preview coordinates.
+    for scene in MANIFEST['scenes']:
+        strip, _ = renderer.render(scene, 15444, 300, view=0, seconds=6)
+        packed, _ = renderer.render(scene, 3840, 2160, view=2, seconds=6)
+        expected = np.zeros_like(packed)
+        expected[:, :, 3] = 255
+        for row in range(5):
+            length = 3564 if row < 4 else 1188
+            expected[row*300:(row+1)*300, :length, :3] = strip[:, row*3564:row*3564+length, :3]
+        error = np.abs(packed.astype(int)-expected.astype(int))
+        assert error.max() <= 2, f'{scene["id"]}: LED output differs from unpacked content: {error.max()}'
+        assert np.any(packed[:1500, :, :3] > 0), f'{scene["id"]}: empty output'
+        print(f'PASS: {scene["id"]} — full 4K LED/strip pixel comparison, max error {error.max()}')
+
 
 if __name__ == '__main__':
     main()

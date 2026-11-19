@@ -3,8 +3,8 @@ import Foundation
 @main struct ParameterRoutingChecks {
     static func main() throws {
         let now = Date()
-        let first = SensorInput(name:"speed sensor",address:"/speed",minimum:0,maximum:100,value:75,receivedAt:now)
-        let second = SensorInput(name:"light sensor",address:"/light",minimum:0,maximum:500,value:100,receivedAt:now)
+        let first = SensorInput(name:"speed sensor",address:"/speed",value:0.75,receivedAt:now)
+        let second = SensorInput(name:"light sensor",address:"/light",value:0.2,receivedAt:now)
         var speed = ParameterRoute.defaults(scene:"scene",parameter:"speed")
         speed.input = .init(enabled:true,sensorID:first.id,minimum:0,maximum:3,smoothingSeconds:0)
         var light = ParameterRoute.defaults(scene:"scene",parameter:"brightness")
@@ -28,7 +28,7 @@ import Foundation
         close(smoothed["brightness"]!,0.8)
         let disabled = resolver.resolve(base:base,routes:[:],sensors:[first,second],now:now,delta:0)
         precondition(disabled == base)
-        var bad = second;bad.minimum=500;bad.maximum=500
+        var bad = second;bad.value = .nan
         close(resolver.resolve(base:base,routes:["brightness":light],sensors:[bad],now:now,delta:1)["brightness"]!,0.4)
 
         let old = """

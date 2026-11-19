@@ -5,10 +5,10 @@ private let orbitPanel = Color(white:0.085)
 private let orbitBrandImage = Bundle.main.url(forResource:"OrbitLogo",withExtension:"png")
     .flatMap { NSImage(contentsOf:$0) }
 private enum OrbitPanel: String, Identifiable {
-    case look, sensors, output, performance
+    case look, sensors, output, performance, oscMappings
     var id: String { rawValue }
     var title: String {
-        switch self { case .look:return "공통 조절";case .sensors:return "센서 입력";case .output:return "출력 설정";case .performance:return "FPS · 성능" }
+        switch self { case .look:return "공통 조절";case .sensors:return "센서 입력";case .output:return "출력 설정";case .performance:return "FPS · 성능";case .oscMappings:return "OSC 매핑" }
     }
 }
 
@@ -25,7 +25,7 @@ struct ContentView: View {
                 HStack(spacing:12) {
                     Text(model.selectedScene?.name ?? "Orbit").font(.system(size:19,weight:.medium))
                     Spacer()
-                    FrameRateReadout(telemetry:model.telemetry,isOutput:false,enabled:true)
+                    FrameRateReadout(telemetry:model.telemetry,isOutput:false,enabled:model.previewsEnabled)
                     FrameRateReadout(telemetry:model.telemetry,isOutput:true,enabled:model.outputOpen)
                     Button { panel = .performance } label: { Image(systemName:"speedometer") }
                         .help("FPS 제한 / 최대 성능 측정").accessibilityLabel("FPS 성능 설정").accessibilityIdentifier("openPerformance")
@@ -38,6 +38,7 @@ struct ContentView: View {
                         Toggle("원본 비교",isOn:$model.showReference).toggleStyle(.button).controlSize(.small)
                     }
                 }.frame(height:30)
+                if model.previewsEnabled {
                 preview.frame(maxWidth:.infinity,maxHeight:.infinity)
                 HStack(spacing:14) {
                     VStack(alignment:.leading,spacing:5) {
@@ -50,6 +51,15 @@ struct ContentView: View {
                         OrbitMetalView(model:model,mode:2).frame(width:100,height:56.25)
                     }.frame(width:150)
                 }.frame(height:72)
+                } else {
+                    VStack(spacing:12) {
+                        Image(systemName:"eye.slash").font(.system(size:26))
+                        Text("프리뷰 꺼짐 · GPU 사용 절약")
+                        Text(model.outputOpen ? "LED 출력은 계속됩니다" : "프리뷰 설정에서 다시 켤 수 있습니다").font(.caption).foregroundStyle(.secondary)
+                        Button("프리뷰 켜기") { model.previewPolicy = .always }
+                    }.frame(maxWidth:.infinity,maxHeight:.infinity)
+                        .overlay(RoundedRectangle(cornerRadius:9).stroke(model.outputActive ? .red : Color.white.opacity(0.12),lineWidth:model.outputActive ? 3 : 1))
+                }
             }.padding(.horizontal,18).padding(.bottom,12)
             Divider()
             sceneControls
@@ -63,6 +73,8 @@ struct ContentView: View {
         .sheet(item:$panel) { selected in
             if selected == .performance {
                 PerformanceView(model:model,measurement:model.performance) { panel=nil }
+            } else if selected == .oscMappings {
+                OSCMappingView(model:model) { panel=nil }
             } else {
                 OrbitSettingsPanel(model:model,panel:selected,initialSensorID:$initialSensorID) { panel=nil }
             }
@@ -90,6 +102,8 @@ struct ContentView: View {
             Text(model.playing ? "PLAYING" : "PAUSED").font(.system(size:9,design:.monospaced)).foregroundStyle(.secondary)
             PlaybackTimeReadout(telemetry:model.telemetry)
             Spacer()
+            Button {panel = .oscMappings} label:{Label("OSC 매핑",systemImage:"point.3.connected.trianglepath.dotted")}
+                .accessibilityIdentifier("openOSCMapping")
             Circle().fill(model.outputActive ? .red : .gray).frame(width:7,height:7)
             Text(model.outputStatus).font(.system(size:10)).lineLimit(1)
             Button {panel = .output} label:{Label("출력 설정",systemImage:"display")}.accessibilityIdentifier("openOutput")
@@ -158,21 +172,27 @@ struct ContentView: View {
             }.frame(height:22)
             if model.selectedScene?.testScene == true {
                 HStack(spacing:24) {
-                    PatternPicker(model:model).frame(width:225)
+                    PatternPicker(model:model).frame(width:285)
                     MappedParameterSlider(model:model,key:"brightness",title:"밝기").frame(width:200)
+                    if [2,10,11].contains(Int(model.value("testPattern"))) {
+                        VStack(alignment:.leading,spacing:4) {
+                            Text("1–5 구간별 고유색 · 안쪽 빨강 띠 · 바깥쪽 파랑 띠")
+                            Text(model.value("flipV") > 0.5 ? "안팎 반전 켜짐 · 색과 표식 위치가 뒤집힙니다" : "펼친 LED 영상: 각 줄 위 = 안쪽 · 아래 = 바깥쪽")
+                                .foregroundStyle(.secondary)
+                        }.font(.system(size:11)).accessibilityIdentifier("radialTestLegend")
+                    }
                     Spacer()
                 }
             } else if model.usesTexture {
                 HStack(spacing:24) {
-                    MappedParameterSlider(model:model,key:"speed",title:"재생 속도",range:0...3,suffix:"×")
+                    MappedParameterSlider(model:model,key:"speed",title:"재생 속도")
                     MappedParameterSlider(model:model,key:"brightness",title:"밝기")
                     MappedParameterSlider(model:model,key:"energy",title:"발광")
                 }
             } else {
                 LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:24),count:min(4,max(1,model.shaderParameters.count))),spacing:12) {
                     ForEach(model.shaderParameters) { control in
-                        MappedParameterSlider(model:model,key:control.id,title:control.title,
-                                              range:control.minimum...control.maximum,suffix:control.unit)
+                        MappedParameterSlider(model:model,key:control.id,title:control.title)
                     }
                 }.id(model.selectedSceneID)
             }
@@ -210,7 +230,7 @@ private struct OrbitSettingsPanel: View {
                 .padding(20)
             Divider()
             Group {
-                switch panel {case .look:look;case .sensors:sensors;case .output:output;case .performance:EmptyView()}
+                switch panel {case .look:look;case .sensors:sensors;case .output:output;case .performance,.oscMappings:EmptyView()}
             }.padding(20).frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.topLeading)
             Divider()
             HStack {
@@ -235,9 +255,9 @@ private struct OrbitSettingsPanel: View {
                 if !model.connectedCompatibilityParameters.isEmpty {Text("기존 연결").tag(2)}
             }.pickerStyle(.segmented)
             if tab == 0 {
-                parameter("전체 재생 속도","speed",range:0...3)
+                parameter("전체 재생 속도","speed")
                 parameter("전체 밝기","brightness")
-                parameter("색상 이동","hueShift",range:-0.5...0.5)
+                parameter("색상 이동","hueShift")
                 Text("모든 씬에 공통인 재생·색 조절입니다. 씬 고유의 파라미터는 메인 화면에 모두 표시됩니다.")
                     .font(.system(size:11)).foregroundStyle(.secondary)
             } else if tab == 1 {
@@ -249,7 +269,7 @@ private struct OrbitSettingsPanel: View {
                     .font(.system(size:10)).foregroundStyle(.secondary)
             } else {
                 ForEach(model.connectedCompatibilityParameters) { control in
-                    parameter(control.title,control.id,range:control.minimum...control.maximum)
+                    parameter(control.title,control.id)
                 }
                 Text("이전 버전에서 연결한 입력·출력을 유지합니다. 연결 버튼에서 확인하거나 해제할 수 있습니다.")
                     .font(.system(size:11)).foregroundStyle(.secondary)
@@ -262,13 +282,13 @@ private struct OrbitSettingsPanel: View {
             if tab==0 {
                 parameter(model.usesTexture ? "질감 대비" : "밀도","density")
                 parameter(model.usesTexture ? "발광" : "에너지","energy")
-                parameter("색상 이동","hueShift",range:-0.5...0.5)
+                parameter("색상 이동","hueShift")
                 Text(model.usesTexture ? "추출한 원본을 재생합니다." : "빛의 형태·색·질감·시간 변화를 셰이더 코드로 생성합니다.").font(.system(size:10)).foregroundStyle(.secondary)
             } else if tab==1 {
-                MappedParameterSlider(model:model,key:"speed",title:"전체 속도",range:0...3,suffix:"×")
+                MappedParameterSlider(model:model,key:"speed",title:"전체 속도")
                 parameter(model.usesTexture ? "부분 흐름 변형" : "움직임","turbulence")
                 if model.usesTexture && model.selectedScene?.texture?.kind=="image" {parameter("전체 회전","rotation")}
-                Text(model.usesTexture ? "원본 재생 1.00×는 추출 구간의 원래 속도입니다." : "속도는 시간 진행을, 움직임은 씬 내부의 변화를 조절합니다.").font(.system(size:10)).foregroundStyle(.secondary)
+                Text(model.usesTexture ? "재생 속도 0은 정지, 1은 최대입니다. 원본 속도는 약 0.33입니다." : "속도는 시간 진행을, 움직임은 씬 내부의 변화를 조절합니다.").font(.system(size:10)).foregroundStyle(.secondary)
             } else {
                 parameter("빛이 남는 범위","coverage")
                 parameter("소멸 경계 부드러움","gapSoftness")
@@ -306,7 +326,7 @@ private struct OrbitSettingsPanel: View {
                     VStack(alignment:.leading,spacing:12) {
                         labeled("이름") {TextField("센서 이름",text:sensor.name)}
                         labeled("OSC 주소") {TextField("/park/sensor",text:sensor.address).font(.system(size:11,design:.monospaced))}
-                        HStack {labeled("입력 최소") {TextField("0",value:sensor.minimum,format:.number)};labeled("입력 최대") {TextField("100",value:sensor.maximum,format:.number)}}
+                        Text("OSC Float · 0.0–1.0").foregroundStyle(.secondary)
                         Stepper("OSC 인수 \(sensor.wrappedValue.argument)",value:sensor.argument,in:0...15)
                         HStack {Text("마지막 수신 값").foregroundStyle(.secondary);Spacer();Text(sensor.wrappedValue.value.map{String(format:"%.2f",$0)} ?? "대기 중").monospacedDigit()}
                         Button("입력 삭제",role:.destructive) {
@@ -353,10 +373,16 @@ private struct OrbitSettingsPanel: View {
                     }.buttonStyle(.borderedProminent).accessibilityIdentifier("outputSettingsStartStop")
                 }
                 Divider()
-                Text(model.outputSizeLabel).font(.system(size:24,weight:.medium,design:.monospaced))
+                Picker("운영 화면 프리뷰",selection:$model.previewPolicy) {
+                    ForEach(PreviewPolicy.allCases) { Text($0.label).tag($0) }
+                }.accessibilityIdentifier("previewPolicy")
+                Toggle("앱 실행 시 이전 수신·송신·출력 상태 복원",isOn:$model.resumeOnLaunch)
+                    .accessibilityIdentifier("resumeInstallation")
+                if model.displayFallback { Text("저장한 모니터 없음 · 현재 화면으로 대체").foregroundStyle(.orange) }
+                Text(model.outputSizeLabel).font(.system(size:20,weight:.medium,design:.monospaced))
                 Text("출력은 별도 창으로 열립니다. 전체화면은 그 창이 있는 모니터에 맞춰 확대합니다. 자동 해상도는 창 크기와 화면에 맞춰 바뀝니다.")
                     .foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
-                Text("항상 16:9 유지 · 남는 영역은 검정\nLED 원본 배치: 3840 × 2160 (1:1 픽셀 확인은 4K 선택)")
+                Text("LED 5행 배치 고정 · 16:9 유지 · 남는 영역은 검정\n기준 3840 × 2160 · 링 프리뷰는 운영 화면 전용")
                     .font(.system(size:10)).foregroundStyle(.secondary)
             } else {
                 parameter("링 시작점","angleOffset")
@@ -376,8 +402,8 @@ private struct OrbitSettingsPanel: View {
             }
         }.font(.system(size:12))
     }
-    private func parameter(_ title:String,_ key:String,range:ClosedRange<Double>=0...1)->some View {
-        MappedParameterSlider(model:model,key:key,title:title,range:range,suffix:model.parameterSpec(key).unit)
+    private func parameter(_ title:String,_ key:String)->some View {
+        MappedParameterSlider(model:model,key:key,title:title)
     }
     private func boolBinding(_ key:String)->Binding<Bool> {Binding(get:{model.value(key)>0.5},set:{model.setValue(key,$0 ? 1:0)})}
     private func labeled<V:View>(_ title:String,@ViewBuilder content:()->V)->some View {
@@ -411,7 +437,7 @@ private struct FrameRateReadout: View {
             .accessibilityIdentifier(id)
             .help(enabled
                 ? "최근 약 1초간 GPU가 그리기를 완료한 프레임 수입니다. 모니터·LED의 수신 주사율과는 다를 수 있습니다. 일시정지 중에도 화면을 계속 그리므로 FPS는 유지될 수 있습니다."
-                : "출력 시작 후 별도 출력 화면의 FPS를 표시합니다.")
+                : (isOutput ? "출력 시작 후 별도 출력 화면의 FPS를 표시합니다." : "프리뷰 렌더링이 꺼져 있습니다."))
     }
 }
 
@@ -427,11 +453,11 @@ struct SensorDot:View {
 }
 private struct PatternPicker:View {
     @ObservedObject var model:OrbitModel
-    let names=["구간 번호 / 방향","픽셀 그리드","안쪽 / 바깥쪽","RGB","16단계 회색","화이트","블랙","이동 마커","구간 이음새","1픽셀 체크"]
+    let names=["구간 번호 / 방향","픽셀 그리드","구간 1–5 + 안팎 띠","RGB","16단계 회색","화이트","블랙","이동 마커","구간 이음새","1픽셀 체크","안쪽만 · 구간색 + 빨강 띠","바깥쪽만 · 구간색 + 파랑 띠"]
     var body:some View {
         Picker("테스트",selection:Binding(get:{Int(model.value("testPattern"))},set:{model.setValue("testPattern",Float($0))})) {
             ForEach(names.indices,id:\.self){Text(names[$0]).tag($0)}
-        }
+        }.accessibilityIdentifier("calibrationPattern")
     }
 }
 private struct AcceptFirstClick:ViewModifier {

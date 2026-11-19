@@ -26,13 +26,12 @@ enum OSCDecoder {
             case "f", "i":
                 guard offset + 4 <= bytes.count else { return [] }
                 let raw = word(bytes, offset); offset += 4
-                values.append(tag == "f" ? Double(Float(bitPattern: raw)) : Double(Int32(bitPattern: raw)))
+                values.append(tag == "f" ? Double(Float(bitPattern: raw)) : .nan)
             case "d", "h":
                 guard offset + 8 <= bytes.count else { return [] }
                 let raw = UInt64(word(bytes,offset)) << 32 | UInt64(word(bytes,offset+4)); offset += 8
-                values.append(tag == "d" ? Double(bitPattern: raw) : Double(Int64(bitPattern: raw)))
-            case "T": values.append(1)
-            case "F": values.append(0)
+                values.append(tag == "d" ? Double(bitPattern: raw) : .nan)
+            case "T", "F": values.append(.nan)
             case "s":
                 guard string(bytes,&offset) != nil else { return [] }; values.append(.nan)
             default: return []

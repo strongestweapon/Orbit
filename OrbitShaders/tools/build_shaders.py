@@ -28,9 +28,9 @@ PRESENCE = {
 }
 STILLS = {'07_spectral_fragments':'spectral-fragments-reference',
           '08_golden_drift':'golden-drift-reference'}
-PATTERNS = ['Segments 1-5 + direction', '100x50 pixel grid', 'Inner red / outer blue',
+PATTERNS = ['Segments 1-5 + direction', '100x50 pixel grid', 'Segment colors 1-5 + inner red / outer blue edges',
             'RGB', '16-step gray ramp', 'White', 'Black', 'Moving marker',
-            'Segment seams', 'Single-pixel checker']
+            'Segment seams', 'Single-pixel checker', 'Inner only (segment colors + red edge)', 'Outer only (segment colors + blue edge)']
 LAYOUT = ['outputWidth','outputHeight','viewMode','phaseTime','density','turbulence',
           'energy','hueShift','brightness','seed','angleOffset','flipU','flipV',
           'ringWidth','testPattern','markerWidth','coverage','gapSoftness','gapMotion','fragmentation','shape0','shape1','shape2','shape3']
@@ -170,8 +170,8 @@ vertex float4 orbit_fullscreen_vertex(uint id [[vertex_id]]) {
     (ROOT/'config/scenes.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n')
     mappings={'schemaVersion':1,'status':'example bindings; native app supports per-parameter OSC input and MIDI/OSC output',
       'osc':{'bindAddress':'0.0.0.0','udpPort':9000,'expectedIntervalSeconds':30,'staleAfterSeconds':90},
-      'sensors':[{'id':'racing_speed','address':'/park/racing/speed','argument':0,'type':'float','range':[0,100]},
-                 {'id':'visitors','address':'/park/visitors','argument':0,'type':'int','range':[0,500]}],
+      'sensors':[{'id':'racing_speed','address':'/park/racing/speed','argument':0,'type':'float','range':[0,1]},
+                 {'id':'visitors','address':'/park/visitors','argument':0,'type':'float','range':[0,1]}],
       'scenes':{}}
     for scene in manifest['scenes']:
         if scene['testScene']: mappings['scenes'][scene['id']]=[]; continue

@@ -15,17 +15,17 @@
       "type": "float",
       "range": [
         0,
-        100
+        1
       ]
     },
     {
       "id": "visitors",
       "address": "/park/visitors",
       "argument": 0,
-      "type": "int",
+      "type": "float",
       "range": [
         0,
-        500
+        1
       ]
     }
   ],

@@ -4,11 +4,8 @@ struct MappedParameterSlider: View {
     @ObservedObject var model: OrbitModel
     let key: String
     let title: String
-    var range: ClosedRange<Double> = 0...1
-    var suffix = ""
     private var value: Binding<Double> {
-        Binding(get:{key == "speed" ? Double(model.playbackSpeed) : Double(model.value(key))},
-                set:{ if key == "speed" {model.setSpeed(Float($0))} else {model.setValue(key,Float($0))} })
+        Binding(get:{model.normalizedParameterValue(key)},set:{model.setNormalizedParameterValue(key,$0)})
     }
     var body: some View {
         VStack(spacing:4) {
@@ -16,9 +13,9 @@ struct MappedParameterSlider: View {
                 Text(title).foregroundStyle(.secondary).lineLimit(1).help(model.parameterSpec(key).detail)
                 ParameterRouteButton(model:model,key:key,title:title)
                 Spacer(minLength:0)
-                Text(String(format:"%.2f",value.wrappedValue)+suffix).monospacedDigit().lineLimit(1)
+                Text(String(format:"%.2f",value.wrappedValue)).monospacedDigit().lineLimit(1)
             }.font(.system(size:11))
-            Slider(value:value,in:range).controlSize(.small).accessibilityLabel(title).accessibilityIdentifier("parameter_"+key)
+            Slider(value:value,in:0...1).controlSize(.small).accessibilityLabel(title).accessibilityIdentifier("parameter_"+key)
                 .disabled(model.route(for:key).input.enabled && model.selectedScene?.testScene == false)
         }.frame(height:38)
     }
@@ -63,6 +60,11 @@ struct ParameterRoutingPopover: View {
     private func input<T>(_ path: WritableKeyPath<ParameterInputRoute,T>) -> Binding<T> {
         Binding(get:{route.input[keyPath:path]},set:{value in model.setRoute(key) {$0.input[keyPath:path]=value}})
     }
+    private func normalizedInput(_ path: WritableKeyPath<ParameterInputRoute,Double>) -> Binding<Double> {
+        Binding(get:{spec.normalized(route.input[keyPath:path])},set:{value in
+            model.setRoute(key) { $0.input[keyPath:path]=spec.rawValue(normalized:value) }
+        })
+    }
     private func output<T>(_ path: WritableKeyPath<ParameterOutputRoute,T>) -> Binding<T> {
         Binding(get:{route.output[keyPath:path]},set:{value in model.setRoute(key) {$0.output[keyPath:path]=value;$0.output.configured=true}})
     }
@@ -75,7 +77,7 @@ struct ParameterRoutingPopover: View {
                         .font(.system(size:10)).foregroundStyle(.secondary)
                 }
                 Spacer()
-                Text(String(format:"%.3f",currentValue)).font(.system(size:18,design:.monospaced))
+                Text(String(format:"%.3f",spec.normalized(currentValue))).font(.system(size:18,design:.monospaced))
             }
             if !spec.detail.isEmpty {
                 Text(spec.detail).font(.system(size:11)).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
@@ -108,14 +110,14 @@ struct ParameterRoutingPopover: View {
                     Text(sensor.address).font(.system(size:10,design:.monospaced)).lineLimit(1)
                     Spacer(); Text(sensor.value.map {String(format:"%.2f",$0)} ?? "대기 중").monospacedDigit()
                 }.foregroundStyle(.secondary)
-                Text("센서 범위 \(sensor.minimum.formatted()) … \(sensor.maximum.formatted()) → 아래 영상 값으로 변환")
+                Text("OSC Float 0.0–1.0 → 아래 영상 값으로 변환")
                     .font(.system(size:10)).foregroundStyle(.secondary)
             } else {Text("메인 화면의 ‘입력 센서’에서 추가할 수 있습니다.").font(.system(size:10)).foregroundStyle(.secondary)}
             HStack(spacing:14) {
-                field("영상 최소",value:input(\.minimum),id:"routeInputMin")
-                field("영상 최대",value:input(\.maximum),id:"routeInputMax")
+                field("영상 최소",value:normalizedInput(\.minimum),id:"routeInputMin")
+                field("영상 최대",value:normalizedInput(\.maximum),id:"routeInputMax")
             }
-            Text("허용 범위 \(spec.range.lowerBound.formatted()) … \(spec.range.upperBound.formatted()) · 최소 > 최대이면 반대로 반응")
+            Text("영상 값 0.0–1.0 · 최소 > 최대이면 반대로 반응")
                 .font(.system(size:10)).foregroundStyle(.secondary)
             VStack(spacing:5) {
                 HStack {Text("부드럽게 전환");Spacer();Text(String(format:"%.1f s",route.input.smoothingSeconds)).monospacedDigit()}
@@ -123,9 +125,8 @@ struct ParameterRoutingPopover: View {
             }
             HStack {
                 Text("수신 없을 때 기본값")
-                TextField("기본값",value:Binding(get:{model.baseParameterValue(key)},set:{v in
-                    let value = Float(spec.clamp(v)); if key == "speed" {model.setSpeed(value)} else {model.setValue(key,value)}
-                }),format:.number).frame(width:85)
+                TextField("기본값",value:Binding(get:{spec.normalized(model.baseParameterValue(key))},set:{model.setNormalizedParameterValue(key,$0)}),format:.number.precision(.fractionLength(0...3)))
+                    .frame(width:85).accessibilityIdentifier("routeFallbackValue")
             }
             Text("90초 동안 수신이 없거나 입력이 삭제되면 기본값으로 돌아갑니다. 녹색 점은 입력 매핑, 파란 점은 출력 매핑입니다.")
                 .font(.system(size:10)).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
@@ -166,8 +167,8 @@ struct ParameterRoutingPopover: View {
                 field("송신 최대",value:output(\.maximum),id:"routeOutputMax")
             }
             HStack {
-                Text("영상 값 → 송신 값").foregroundStyle(.secondary)
-                Spacer(); Text(route.output.mappedValue(currentValue,spec:spec).map {String(format:"%.3f → %.3f",currentValue,$0)} ?? "설정 확인").monospacedDigit()
+                Text("영상 값 (0–1) → 송신 값").foregroundStyle(.secondary)
+                Spacer(); Text(route.output.mappedValue(currentValue,spec:spec).map {String(format:"%.3f → %.3f",spec.normalized(currentValue),$0)} ?? "설정 확인").monospacedDigit()
             }.font(.system(size:10))
             if let issue = model.outputIssue(for:key) {Text(issue).font(.system(size:10)).foregroundStyle(.orange).fixedSize(horizontal:false,vertical:true)}
             Divider()

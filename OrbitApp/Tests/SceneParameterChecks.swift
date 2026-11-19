@@ -35,6 +35,12 @@ import Foundation
             for (index,p) in scene.allParameters.enumerated() {
                 let spec = p.spec(index:index)
                 close(spec.clamp(p.defaultValue),p.defaultValue)
+                close(spec.normalized(p.minimum),0)
+                close(spec.normalized(p.maximum),1)
+                close(spec.rawValue(normalized:spec.normalized(p.defaultValue)),p.defaultValue)
+                for position in [0.0,0.25,0.5,0.75,1.0] {
+                    close(spec.normalized(spec.rawValue(normalized:position)),position)
+                }
                 let output = ParameterRoute.defaults(scene:scene.id,parameter:p.id,spec:spec).output
                 precondition(output.controller == p.midiCC)
                 close(output.mappedValue(p.minimum,spec:spec)!,0)
@@ -49,7 +55,7 @@ import Foundation
         precondition(Set(counts.values).count >= 4)
         let spectral = scenes.first { $0.id == "07_spectral_fragments" }!
         let specs = spectral.parameters.enumerated().map { $0.element.spec(index:$0.offset) }
-        let sensor = SensorInput(name:"test",address:"/test",value:50,receivedAt:Date())
+        let sensor = SensorInput(name:"test",address:"/test",value:0.5,receivedAt:Date())
         var routes:[String:ParameterRoute] = [:]
         for spec in specs where ["barLength","barWidth"].contains(spec.id) {
             var route = ParameterRoute.defaults(scene:spectral.id,parameter:spec.id,spec:spec)
@@ -59,6 +65,15 @@ import Foundation
         var resolver=ParameterResolver()
         let values=resolver.resolve(base:["barLength":1,"barWidth":1],routes:routes,sensors:[sensor],now:Date(),delta:1,specs:specs)
         close(values["barLength"]!,0.75);close(values["barWidth"]!,2.125)
+        close(specs.first {$0.id=="barLength"}!.normalized(values["barLength"]!),0.5)
+        close(specs.first {$0.id=="barWidth"}!.normalized(values["barWidth"]!),0.5)
+        let speed=ParameterSpec.find("speed"),hue=ParameterSpec.find("hueShift")
+        close(speed.rawValue(normalized:1),3)
+        close(speed.normalized(1),1.0/3.0)
+        close(hue.rawValue(normalized:0.5),0)
+        close(hue.normalized(-0.5),0);close(hue.normalized(0.5),1)
+        close(speed.rawValue(normalized:2),3);close(speed.rawValue(normalized:-1),0)
+        close(speed.rawValue(normalized:.nan),0)
         precondition(!specs.contains { $0.id == "energy" })
         print("PASS: variable-size scene catalogs, stable MIDI defaults, semantic ranges, legacy values/routes/endpoints preserved, texture isolation, save/reload, independent bar length/width sensor mapping")
     }
