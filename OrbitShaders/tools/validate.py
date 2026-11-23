@@ -25,6 +25,7 @@ def validate_isf():
     results=[]
     try:
         for scene in MANIFEST['scenes']:
+            if scene.get('isf') is None: continue  # Native stateful simulation has no standalone ISF export.
             text=(ROOT/scene['isf']).read_text();match=re.match(r'/\*(.*?)\*/',text,re.S)
             meta=json.loads(match.group(1));assert meta['ISFVSN']=='2.0'
             declarations=['#version 150','uniform float TIME;','uniform vec2 RENDERSIZE;',
@@ -127,6 +128,10 @@ def main():
     assert library is not None,'Combined Metal library failed'
     for scene in MANIFEST['scenes']:
         assert library.newFunctionWithName_(scene['fragmentFunction']) is not None
+        if scene.get('nativeSimulation') == 'pulseOrbit':
+            from validate_pulse_orbit import validate
+            results.append(validate(renderer,scene))
+            continue
         packed,_=renderer.render(scene,3840,2160,2,seconds=3)
         strip,_=renderer.render(scene,15444,300,0,seconds=3)
         assert np.all(packed[:,:,3]==255),'Output alpha must be opaque'

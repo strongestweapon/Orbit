@@ -23,15 +23,16 @@ import Foundation
             route.output.address = "/existing/audio/address"
             old.parameterRoutes = ["energy":route];old.textureParameterRoutes = ["energy":route]
             old.migrateShaderParameters(scene.allParameters)
-            let energy = scene.allParameters.first { $0.legacyKey == "energy" }!
-            close(Double(old.values[energy.id]!),0.91,tolerance:0.000001)
-            precondition(old.parameterRoutes?[energy.id]?.output.controller == 74)
-            precondition(old.parameterRoutes?[energy.id]?.output.address == "/existing/audio/address")
-            precondition(old.parameterRoutes?["energy"] == nil)
-            precondition(old.textureParameterRoutes?["energy"]?.output.controller == 74)
-            old.values[energy.id] = 0.24
-            old.migrateShaderParameters(scene.allParameters)
-            close(Double(old.values[energy.id]!),0.24,tolerance:0.000001)
+            if let energy = scene.allParameters.first(where: { $0.legacyKey == "energy" }) {
+                close(Double(old.values[energy.id]!),0.91,tolerance:0.000001)
+                precondition(old.parameterRoutes?[energy.id]?.output.controller == 74)
+                precondition(old.parameterRoutes?[energy.id]?.output.address == "/existing/audio/address")
+                precondition(old.parameterRoutes?["energy"] == nil)
+                precondition(old.textureParameterRoutes?["energy"]?.output.controller == 74)
+                old.values[energy.id] = 0.24
+                old.migrateShaderParameters(scene.allParameters)
+                close(Double(old.values[energy.id]!),0.24,tolerance:0.000001)
+            }
             for (index,p) in scene.allParameters.enumerated() {
                 let spec = p.spec(index:index)
                 close(spec.clamp(p.defaultValue),p.defaultValue)
@@ -39,7 +40,8 @@ import Foundation
                 close(spec.normalized(p.maximum),1)
                 close(spec.rawValue(normalized:spec.normalized(p.defaultValue)),p.defaultValue)
                 for position in [0.0,0.25,0.5,0.75,1.0] {
-                    close(spec.normalized(spec.rawValue(normalized:position)),position)
+                    let expected = spec.isSwitch ? (position >= 0.5 ? 1.0 : 0.0) : position
+                    close(spec.normalized(spec.rawValue(normalized:position)),expected)
                 }
                 let output = ParameterRoute.defaults(scene:scene.id,parameter:p.id,spec:spec).output
                 precondition(output.controller == p.midiCC)

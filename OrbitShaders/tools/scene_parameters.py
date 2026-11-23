@@ -4,6 +4,21 @@ def control(id, title, detail, uniform, default, minimum=0, maximum=1, group=0, 
                 minimum=minimum,maximum=maximum,group=group,quick=quick,unit=unit,legacyKey=legacy)
 
 PARAMETERS = {
+ '09_pulse_orbit': [
+  control('directionDrive','방향 · 힘','0은 반시계, 0.5는 회전하는 힘 없음, 1은 시계 방향입니다. 교차 회전이 켜지면 가운데 궤도는 반대로 흐릅니다.','density',.72,quick=True),
+  control('attraction','중력','링의 지정한 지점으로 빛을 끌어당기는 힘입니다. 회전하는 힘보다 커지면 빛이 모입니다.','turbulence',.12),
+  control('inertia','관성','이전 움직임을 유지하는 정도입니다. 높을수록 방향과 힘의 변화에 천천히 반응합니다.','energy',.55),
+  control('attractorPosition','중력 위치','0과 1은 12시, 0.25는 3시, 0.5는 6시입니다. 설치 방향 반전·시작점 설정을 따릅니다.','shape0',0),
+  control('pulseLength','펄스 길이','밝은 선두 뒤로 이어지는 꼬리의 길이입니다. 가속할 때 길어지고 감속할 때 짧아집니다.','shape1',.62),
+  control('pulseDensity','펄스 수','각 궤도의 긴 호와 짧은 펄스를 1개에서 4개까지 늘립니다. 새 펄스는 부드럽게 드러납니다.','shape2',.86),
+  control('lineWidth','선 두께','세 궤도를 따라 흐르는 선의 두께입니다. 번짐 없이 선명하게 표시합니다.','shape3',.55),
+  control('innerHue','안쪽 색상','안쪽 궤도: 0.5 미만은 레드, 0.5 이상은 화이트입니다.','laneHue0',0,group=2),
+  control('middleHue','가운데 색상','가운데 궤도: 0.5 미만은 레드, 0.5 이상은 화이트입니다.','laneHue1',1,group=2),
+  control('outerHue','바깥쪽 색상','바깥쪽 궤도: 0.5 미만은 레드, 0.5 이상은 화이트입니다.','laneHue2',0,group=2),
+  control('rhythmAmount','리듬 강도','가속과 감속, 펄스의 생성·소멸, 짧은 펄스열로 나뉘는 변화량입니다. 0이면 일정하게 흐릅니다.','motion0',.85,group=3),
+  control('rhythmRate','리듬 속도','각 펄스가 가속하고 쉬는 주기를 조절합니다. 전체 재생 속도와 별개입니다.','motion1',.55,group=3),
+  control('afterglow','잔광','선두 뒤의 빛이 길게 남는 정도입니다. 낮추면 선두가 강조되고 높이면 꼬리가 더 또렷해집니다.','motion2',.65,group=3),
+  control('counterflow','교차 회전','0.5 이상이면 가운데 궤도가 안팎 궤도와 반대 방향으로 움직입니다. 관성에 따라 서서히 반전합니다.','motion3',1,group=3)],
  '01_chroma_flow': [
   control('foldDensity','주름 밀도','높일수록 유체 표면의 주름이 촘촘해집니다.','density',.48,legacy='density',quick=True),
   control('flowDistortion','유체 뒤틀림','표면의 흐름을 국소적으로 구부립니다.','turbulence',.68,legacy='turbulence'),
@@ -54,6 +69,10 @@ PARAMETERS = {
   control('sparkleStrength','입자 반짝임','금빛 머리를 유지하고 입자의 발광량만 조절합니다.','shape2',1,0,3,group=1,unit='×'),
   control('rippleDepth','물결 굴곡','금빛 머리 내부의 부드러운 물결 변형입니다.','turbulence',.4,group=1,legacy='turbulence')],
 }
+
+# Keep the experimental hue IDs stable for saved routes, but select only red/white.
+for parameter in PARAMETERS['09_pulse_orbit']:
+    if parameter['group'] == 2 or parameter['id'] == 'counterflow': parameter['isSwitch'] = True
 
 # The public control surface follows each scene's visual complexity. Removed
 # 0.3 controls remain available internally so saved values and live routes survive.

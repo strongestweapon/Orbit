@@ -7,7 +7,7 @@ import AppKit
         let defaults=UserDefaults(suiteName:domain)!
         defer { defaults.removePersistentDomain(forName:domain) }
         let model=OrbitModel(defaults:defaults,resources:bundle)
-        precondition(model.scenes.count==8)
+        precondition(model.scenes.count==9)
         model.selectedSceneID="03_aurora_ribbon"
         model.previewPolicy = .hideWhenFullscreen
         model.frameRate = .displayMaximum
@@ -15,12 +15,18 @@ import AppKit
         model.setValue("brightness",0.37)
         model.globalOSC[0].address="/custom/restart"
         model.save()
+        // Simulate upgrading a pre-Pulse installation with customized global cues.
+        var beforeUpgrade=try JSONDecoder().decode(StoredSettings.self,from:defaults.data(forKey:"OrbitSettings.v1")!)
+        beforeUpgrade.scenes.removeValue(forKey:PulseOrbitSimulation.sceneID)
+        beforeUpgrade.globalOSC?.removeAll { $0.sceneID == PulseOrbitSimulation.sceneID }
+        defaults.set(try JSONEncoder().encode(beforeUpgrade),forKey:"OrbitSettings.v1")
         let restored=OrbitModel(defaults:defaults,resources:bundle)
         precondition(restored.selectedSceneID==model.selectedSceneID && !restored.playing)
         precondition(restored.port=="19009" && restored.frameRate == .displayMaximum)
         precondition(restored.previewPolicy == .hideWhenFullscreen && !restored.resumeOnLaunch)
         precondition(abs(restored.value("brightness")-0.37)<0.0001)
         precondition(restored.globalOSC[0].address=="/custom/restart")
+        precondition(restored.globalOSC.contains { $0.sceneID == PulseOrbitSimulation.sceneID })
         // The UI conversion changes neither stored native values nor the shader's available range.
         for scene in restored.scenes where !scene.testScene {
             restored.selectedSceneID=scene.id
@@ -44,6 +50,33 @@ import AppKit
         precondition(restored.globalReceipts[cue.id]?.triggerCount==3)
         restored.receiveOSC(address:restored.sensors[0].address,values:[0.7])
         precondition(restored.sensors[0].value==0.7)
+        restored.selectedSceneID=PulseOrbitSimulation.sceneID
+        restored.playing=false
+        let initial=restored.uniforms(width:1920,height:1080,view:1)
+        precondition(initial.count==PulseOrbitSimulation.uniformCount && Array(initial[24..<48])==PulseOrbitSimulation().uniforms)
+        precondition(initial[48]==0 && initial[49]==1 && initial[50]==0)
+        precondition(abs(initial[52]-0.85)<0.00001 && abs(initial[53]-0.55)<0.00001 && abs(initial[54]-0.65)<0.00001 && initial[55]==1)
+        restored.setNormalizedParameterValue("counterflow",0.2)
+        restored.setNormalizedParameterValue("rhythmAmount",0.4)
+        let motion=restored.uniforms(width:1920,height:1080,view:1)
+        precondition(motion[55]==0 && abs(motion[52]-0.4)<0.00001 && motion[51]==initial[51],"Motion edits must not advance a paused simulation")
+        restored.setNormalizedParameterValue("middleHue",0.25)
+        let recolored=restored.uniforms(width:1920,height:1080,view:1)
+        precondition(recolored[49]==0 && recolored[48]==initial[48] && recolored[50]==initial[50])
+        precondition(Array(recolored[24..<48])==Array(initial[24..<48]),"Color edits must not restart or move pulses")
+        precondition(!restored.parameterSpecs.contains { $0.id=="hueShift" })
+        var directionRoute=restored.route(for:"directionDrive")
+        directionRoute.input.enabled=true;directionRoute.input.sensorID=restored.sensors[0].id
+        directionRoute.input.minimum=0;directionRoute.input.maximum=1;directionRoute.input.smoothingSeconds=0
+        restored.setRoute("directionDrive") { $0=directionRoute }
+        precondition(abs(restored.uniforms(width:3840,height:2160,view:2)[4]-0.7)<0.00001)
+        restored.setNormalizedParameterValue("pulseLength",0.8)
+        restored.resetSceneAppearance()
+        precondition(restored.normalizedParameterValue("middleHue")==1)
+        precondition(abs(restored.normalizedParameterValue("rhythmAmount")-0.85)<0.00001 && restored.normalizedParameterValue("counterflow")==1)
+        precondition(restored.route(for:"directionDrive").input.enabled)
+        precondition(abs(restored.normalizedParameterValue("pulseLength")-0.62)<0.00001)
+        precondition(Array(restored.uniforms(width:3840,height:2160,view:2)[24..<48])==PulseOrbitSimulation().uniforms)
         restored.save()
         var stored=try JSONDecoder().decode(StoredSettings.self,from:defaults.data(forKey:"OrbitSettings.v1")!)
         precondition(stored.sensors[0].value==nil && stored.sensors[0].receivedAt==nil)

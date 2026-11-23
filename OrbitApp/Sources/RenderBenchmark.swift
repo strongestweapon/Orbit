@@ -55,7 +55,7 @@ enum BenchmarkError: LocalizedError {
 enum RenderBenchmark {
     static func run(_ request: BenchmarkRequest, cancellation: BenchmarkCancellation,
                     progress: (Double)->Void = { _ in }) throws -> BenchmarkResult {
-        guard request.uniforms.count == 24, !request.surfaces.isEmpty,
+        guard [24, PulseOrbitSimulation.uniformCount].contains(request.uniforms.count), !request.surfaces.isEmpty,
               request.durationSeconds.isFinite, request.durationSeconds > 0,
               request.warmupSeconds.isFinite, request.warmupSeconds >= 0,
               request.surfaces.allSatisfy({ $0.width > 0 && $0.height > 0 }),
@@ -74,6 +74,8 @@ enum RenderBenchmark {
             }
         }
         let phaseStart = CACurrentMediaTime()
+        var pulseOrbit = PulseOrbitSimulation(uniforms: request.uniforms)
+        var lastSimulationTime = phaseStart
         func stage(seconds: Double, measured: Bool) throws -> (Int,Double,[Double]) {
             var pending = [MTLCommandBuffer?](repeating:nil,count:3)
             defer { for command in pending { command?.waitUntilCompleted() } }
@@ -101,6 +103,11 @@ enum RenderBenchmark {
                         throw BenchmarkError.failed("GPU 작업을 만들 수 없습니다.")
                     }
                     let phase = request.uniforms[3] + Float(CACurrentMediaTime()-phaseStart)*request.speed
+                    if request.uniforms.count == PulseOrbitSimulation.uniformCount {
+                        let now = CACurrentMediaTime()
+                        pulseOrbit.advance(by: (now-lastSimulationTime)*Double(request.speed), controls: .init(uniforms: request.uniforms))
+                        lastSimulationTime = now
+                    }
                     for (index,surface) in request.surfaces.enumerated() {
                         let pass = MTLRenderPassDescriptor()
                         pass.colorAttachments[0].texture = targets[slot][index]
@@ -113,6 +120,10 @@ enum RenderBenchmark {
                         var uniforms = request.uniforms
                         uniforms[0] = Float(surface.width); uniforms[1] = Float(surface.height)
                         uniforms[2] = surface.mode; uniforms[3] = phase
+                        if uniforms.count == PulseOrbitSimulation.uniformCount {
+                            uniforms.replaceSubrange(24..<48, with: pulseOrbit.uniforms)
+                            uniforms[51] = Float(pulseOrbit.time)
+                        }
                         encoder.setRenderPipelineState(request.pipeline)
                         uniforms.withUnsafeBytes { encoder.setFragmentBytes($0.baseAddress!,length:$0.count,index:0) }
                         encoder.drawPrimitives(type:.triangle,vertexStart:0,vertexCount:3)

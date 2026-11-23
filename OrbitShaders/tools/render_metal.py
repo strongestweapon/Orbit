@@ -2,7 +2,7 @@
 """Render the actual Metal kernels on macOS; no Xcode command-line compiler required.
 Requires PyObjC (objc, Foundation), numpy and Pillow. Not an application runtime.
 """
-import argparse, ctypes, json, statistics, struct, subprocess, time
+import argparse, atexit, ctypes, json, statistics, struct, subprocess, time
 from pathlib import Path
 import objc
 import Foundation
@@ -23,7 +23,28 @@ class MetalRenderer:
         self.buffers={}
         self.pipelines={}
         self.libraries=[]
-        self.uniforms=self.device.newBufferWithLength_options_(MANIFEST['uniformBuffer']['sizeBytes'],0)
+        size=max([MANIFEST['uniformBuffer']['sizeBytes']]+[s.get('uniformBuffer',{}).get('sizeBytes',0) for s in MANIFEST['scenes']])
+        self.uniforms=self.device.newBufferWithLength_options_(size,0)
+        self.pulse_probe=None
+
+    def pulse_state(self,params):
+        if self.pulse_probe is None:
+            build=ROOT.parent/'.build/pulse-review';build.mkdir(parents=True,exist_ok=True)
+            executable=build/'pulse-probe'
+            sources=[ROOT.parent/'OrbitApp/Sources/PulseOrbitSimulation.swift',ROOT/'tools/PulseOrbitProbe.swift']
+            if not executable.exists() or any(p.stat().st_mtime>executable.stat().st_mtime for p in sources):
+                subprocess.run(['xcrun','swiftc','-O','-module-cache-path',str(build/'modules'),
+                                *map(str,sources),'-o',str(executable)],check=True)
+            self.pulse_probe=subprocess.Popen([str(executable)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)
+            def close_probe():
+                if self.pulse_probe.poll() is None:
+                    self.pulse_probe.stdin.close();self.pulse_probe.wait(timeout=5)
+            atexit.register(close_probe)
+        request=dict(seconds=params['phaseTime'],drive=params['density'],attraction=params['turbulence'],
+                     inertia=params['energy'],center=params['shape0'],dynamics=params['motion0'],
+                     rhythmRate=params['motion1'],counterflow=params['motion3']>=0.5)
+        self.pulse_probe.stdin.write(json.dumps(request)+'\n');self.pulse_probe.stdin.flush()
+        return json.loads(self.pulse_probe.stdout.readline())
 
     def pipeline(self,scene):
         sid=scene['id']
@@ -49,6 +70,11 @@ class MetalRenderer:
         for control in scene.get('parameters',[])+scene.get('compatibilityParameters',[]):
             params[control['uniform']]=params[control['id']]
         raw=struct.pack('<'+str(len(MANIFEST['uniformBuffer']['fields']))+'f',*(params[k] for k in MANIFEST['uniformBuffer']['fields']))
+        if scene.get('nativeSimulation')=='pulseOrbit':
+            state=self.pulse_state(params)
+            raw+=struct.pack('<24f',*state[:24])
+            raw+=struct.pack('<8f',params['laneHue0'],params['laneHue1'],params['laneHue2'],state[24],
+                             params['motion0'],params['motion1'],params['motion2'],params['motion3'])
         ctypes.memmove(self.uniforms.contents(),raw,len(raw))
         size=width*height*4
         if size not in self.buffers: self.buffers[size]=self.device.newBufferWithLength_options_(size,0)
@@ -75,7 +101,7 @@ def contact_sheet(renderer,output):
         sheet.paste(image,(x+104,y))
         draw.text((x+22,y+259),scene['name'],font=font,fill='#eceef5')
         ref=scene['referenceSeconds']
-        text=f'Reference {ref[0]}-{ref[1]}s' if ref else (f"{len(MANIFEST['testPatterns'])} calibration patterns" if scene['testScene'] else 'Provided still reference')
+        text=f'Reference {ref[0]}-{ref[1]}s' if ref else (f"{len(MANIFEST['testPatterns'])} calibration patterns" if scene['testScene'] else 'Stateful generative pulses' if scene.get('nativeSimulation') else 'Provided still reference')
         draw.text((x+22,y+283),text,font=small,fill='#aeb4c3')
     sheet.save(output)
 

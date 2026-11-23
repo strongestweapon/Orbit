@@ -26,6 +26,11 @@ struct ContentView: View {
     @ObservedObject var model: OrbitModel
     @State private var panel: OrbitPanel?
     @State private var initialSensorID: UUID?
+    @State private var showingPalette = false
+    @State private var showingMotion = false
+    private var paletteParameters: [ShaderParameter] { model.shaderParameters.filter { $0.group == 2 } }
+    private var motionParameters: [ShaderParameter] { model.shaderParameters.filter { $0.group == 3 } }
+    private var mainParameters: [ShaderParameter] { model.shaderParameters.filter { $0.group < 2 } }
     var body: some View {
         VStack(spacing:0) {
             transport
@@ -44,7 +49,7 @@ struct ContentView: View {
                             Text("실시간 생성").tag(0);Text("원본 재생").tag(1)
                         }.pickerStyle(.segmented).frame(width:225).accessibilityIdentifier("renderStyle")
                     }
-                    if model.selectedScene?.testScene == false {
+                    if model.selectedScene?.hasReference == true {
                         Toggle("원본 비교",isOn:$model.showReference).toggleStyle(.button).controlSize(.small)
                             .tint(model.showReference ? orbitAccent : .white)
                     }
@@ -151,7 +156,7 @@ struct ContentView: View {
     }
     private var preview: some View {
         HStack(spacing:10) {
-            if model.showReference,let scene=model.selectedScene,!scene.testScene {
+            if model.showReference,let scene=model.selectedScene,scene.hasReference {
                 VStack(spacing:6) {
                     caption(scene.referenceImage==nil ? "참조 영상" : "참조 스틸컷")
                     if let name=scene.referenceImage,let url=Bundle.main.url(forResource:name,withExtension:"png"),let image=NSImage(contentsOf:url) {
@@ -160,7 +165,7 @@ struct ContentView: View {
                 }.frame(maxWidth:.infinity)
             }
             VStack(spacing:6) {
-                if model.showReference {caption(model.usesTexture ? "원본 재생" : "코드 생성")}
+                if model.showReference && model.selectedScene?.hasReference == true {caption(model.usesTexture ? "원본 재생" : "코드 생성")}
                 OrbitMetalView(model:model,mode:1)
                     .clipShape(RoundedRectangle(cornerRadius:9))
                     .overlay(RoundedRectangle(cornerRadius:9).stroke(model.outputActive ? .red : Color.white.opacity(0.12),lineWidth:model.outputActive ? 3 : 1))
@@ -173,6 +178,81 @@ struct ContentView: View {
                 Text(model.selectedScene?.testScene == true ? "LED TEST" : (model.usesTexture ? "원본 재생 조절" : "\(model.selectedScene?.name ?? "") · 파라미터 \(model.shaderParameters.count)개"))
                     .font(.system(size:11,weight:.semibold)).accessibilityIdentifier("sceneParameterCount")
                 Spacer()
+                if !motionParameters.isEmpty {
+                    Button { showingMotion = true } label: { Label("움직임",systemImage:"waveform.path") }
+                        .accessibilityIdentifier("openPulseMotion")
+                        .popover(isPresented:$showingMotion) {
+                            VStack(alignment:.leading,spacing:20) {
+                                HStack {
+                                    Text("펄스 움직임").font(.headline)
+                                    Spacer()
+                                    Button { showingMotion = false } label: { Image(systemName:"xmark") }
+                                        .accessibilityLabel("움직임 닫기")
+                                }
+                                ForEach(motionParameters) { control in
+                                    if control.isSwitch == true {
+                                        HStack {
+                                            Text(control.title).font(.system(size:11)).help(control.detail)
+                                            ParameterRouteButton(model:model,key:control.id,title:control.title)
+                                            Spacer()
+                                            Toggle(control.title,isOn:Binding(
+                                                get:{model.value(control.id)>=0.5},
+                                                set:{model.setNormalizedParameterValue(control.id,$0 ? 1:0)}))
+                                                .labelsHidden().toggleStyle(.switch)
+                                                .disabled(model.route(for:control.id).input.enabled)
+                                                .accessibilityIdentifier("parameter_"+control.id)
+                                        }.frame(height:38)
+                                    } else {
+                                        MappedParameterSlider(model:model,key:control.id,title:control.title)
+                                    }
+                                }
+                                Text("궤도별 가속 · 감속 · 잔광 · 생성과 소멸\n각 항목을 센서 / Live에 개별 매핑할 수 있습니다.")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }.padding(20).frame(width:410)
+                                .tint(orbitAccent).buttonStyle(OrbitSecondaryButtonStyle())
+                        }
+                }
+                if !paletteParameters.isEmpty {
+                    Button { showingPalette = true } label: {
+                        HStack(spacing:6) {
+                            HStack(spacing:3) {
+                                ForEach(paletteParameters) { control in
+                                    Circle().fill(model.value(control.id) >= 0.5 ? Color.white : Color(.sRGB,red:1,green:0,blue:0,opacity:1)).frame(width:8,height:8)
+                                }
+                            }.accessibilityHidden(true)
+                            Text("궤도 색")
+                        }
+                    }.accessibilityIdentifier("openPulsePalette")
+                        .popover(isPresented:$showingPalette) {
+                            VStack(alignment:.leading,spacing:18) {
+                                HStack {
+                                    Text("궤도별 펄스 색").font(.headline)
+                                    Spacer()
+                                    Button { showingPalette = false } label: { Image(systemName:"xmark") }
+                                        .accessibilityLabel("궤도 색 닫기")
+                                }
+                                ForEach(paletteParameters) { control in
+                                    HStack(spacing:12) {
+                                        Circle().fill(model.value(control.id) >= 0.5 ? Color.white : Color(.sRGB,red:1,green:0,blue:0,opacity:1))
+                                            .frame(width:18,height:18).accessibilityHidden(true)
+                                        Text(control.title).font(.system(size:11)).help(control.detail)
+                                        ParameterRouteButton(model:model,key:control.id,title:control.title)
+                                        Spacer()
+                                        Picker(control.title,selection:Binding(
+                                            get:{ model.value(control.id) >= 0.5 ? 1 : 0 },
+                                            set:{ model.setNormalizedParameterValue(control.id,Double($0)) })) {
+                                                Text("레드").tag(0); Text("화이트").tag(1)
+                                            }.labelsHidden().pickerStyle(.segmented).frame(width:160)
+                                                .disabled(model.route(for:control.id).input.enabled)
+                                                .accessibilityIdentifier("parameter_"+control.id)
+                                    }
+                                }
+                                Text("0.5 미만 레드 · 0.5 이상 화이트 · 센서 / Live 매핑 가능")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }.padding(20).frame(width:410)
+                                .tint(orbitAccent).buttonStyle(OrbitSecondaryButtonStyle())
+                        }
+                }
                 if model.selectedScene?.testScene == false {
                     Button {model.resetSceneAppearance()} label:{Label("초기값 복원",systemImage:"arrow.counterclockwise")}
                         .accessibilityIdentifier("resetSceneAppearance")
@@ -202,8 +282,8 @@ struct ContentView: View {
                     MappedParameterSlider(model:model,key:"energy",title:"발광")
                 }
             } else {
-                LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:24),count:min(4,max(1,model.shaderParameters.count))),spacing:12) {
-                    ForEach(model.shaderParameters) { control in
+                LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:24),count:min(4,max(1,mainParameters.count))),spacing:12) {
+                    ForEach(mainParameters) { control in
                         MappedParameterSlider(model:model,key:control.id,title:control.title)
                     }
                 }.id(model.selectedSceneID)
@@ -270,7 +350,7 @@ private struct OrbitSettingsPanel: View {
             if tab == 0 {
                 parameter("전체 재생 속도","speed")
                 parameter("전체 밝기","brightness")
-                parameter("색상 이동","hueShift")
+                if model.parameterSpecs.contains(where: { $0.id == "hueShift" }) { parameter("색상 이동","hueShift") }
                 Text("모든 씬에 공통인 재생·색 조절입니다. 씬 고유의 파라미터는 메인 화면에 모두 표시됩니다.")
                     .font(.system(size:11)).foregroundStyle(.secondary)
             } else if tab == 1 {

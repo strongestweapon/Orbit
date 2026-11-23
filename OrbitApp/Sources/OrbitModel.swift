@@ -16,6 +16,7 @@ struct SceneDescriptor: Decodable, Identifiable {
     let parameters: [ShaderParameter]
     let compatibilityParameters: [ShaderParameter]?
     var allParameters: [ShaderParameter] { parameters + (compatibilityParameters ?? []) }
+    var hasReference: Bool { referenceImage != nil || referenceSeconds != nil }
 }
 struct SceneManifest: Decodable { let scenes: [SceneDescriptor] }
 
@@ -103,6 +104,7 @@ final class OrbitModel: ObservableObject {
     let comparison = ComparisonPlayback()
     let textureSource = OrbitGPU.shared.device.map { OrbitTextureSource(device:$0) }
     private var phaseTime: Double = 0
+    private var pulseOrbit = PulseOrbitSimulation()
     private var lastTime = CACurrentMediaTime()
     private var parameterResolver = ParameterResolver()
     private var controlTimer: Timer?
@@ -145,7 +147,8 @@ final class OrbitModel: ObservableObject {
     }
     var parameterSpecs: [ParameterSpec] {
         if usesTexture || selectedScene?.testScene == true { return ParameterSpec.all }
-        let common = ParameterSpec.all.filter { !["density","turbulence","energy","rotation"].contains($0.id) }
+        let excluded = ["density","turbulence","energy","rotation"] + (selectedSceneID == PulseOrbitSimulation.sceneID ? ["hueShift"] : [])
+        let common = ParameterSpec.all.filter { !excluded.contains($0.id) }
         return common + allShaderParameters.enumerated().map { $0.element.spec(index:$0.offset) }
     }
     func parameterSpec(_ key: String) -> ParameterSpec { parameterSpecs.first { $0.id == key } ?? .find(key) }
@@ -244,6 +247,12 @@ final class OrbitModel: ObservableObject {
                 outputResolution = stored.outputResolution ?? .automatic
                 customOutputWidth = OutputGeometry.normalizedWidth(stored.customOutputWidth ?? 1920)
                 globalOSC = stored.globalOSC ?? globalOSC
+                // Add new scene cues without replacing edited or disabled existing routes.
+                if stored.globalOSC != nil {
+                    for scene in scenes where stored.scenes[scene.id] == nil && !globalOSC.contains(where: { $0.sceneID == scene.id }) {
+                        globalOSC.append(GlobalOSCMapping(address:"/orbit/scene/"+scene.id,action:.scene,sceneID:scene.id))
+                    }
+                }
                 startupSession = stored.installation
                 preferredDisplayUUID = stored.installation?.displayUUID
                 if let id = stored.installation?.selectedSceneID, scenes.contains(where: { $0.id == id }) { selectedSceneID = id }
@@ -377,6 +386,7 @@ final class OrbitModel: ObservableObject {
     }
     func restartPlayback() {
         phaseTime = 0; lastTime = CACurrentMediaTime()
+        pulseOrbit = PulseOrbitSimulation()
         telemetry.updateTime(0,force:true)
         comparison.invalidatePosition()
     }
@@ -558,8 +568,17 @@ final class OrbitModel: ObservableObject {
         }
         let names = ["density","turbulence","energy","hueShift","brightness","seed","angleOffset","flipU","flipV","ringWidth","testPattern","markerWidth",
                      "coverage","gapSoftness","gapMotion","fragmentation","shape0","shape1","shape2","shape3"]
-        // Stable 96-byte GPU layout; semantic parameter IDs are packed into their declared slots.
-        return [width,height,view,Float(phaseTime)] + names.map { values[$0] ?? 0 }
+        // Existing scenes retain the stable 96-byte layout. Pulse Orbit appends its shared particle state.
+        var packed = [width,height,view,Float(phaseTime)] + names.map { values[$0] ?? 0 }
+        if selectedSceneID == PulseOrbitSimulation.sceneID {
+            packed += pulseOrbit.uniforms
+            packed += [values["laneHue0"] ?? 0, values["laneHue1"] ?? 1, values["laneHue2"] ?? 0, Float(pulseOrbit.time)]
+            packed += [values["motion0"] ?? 0.85, values["motion1"] ?? 0.55, values["motion2"] ?? 0.65, values["motion3"] ?? 1]
+            if playing { pulseOrbit.advance(by: delta * Double(speed), controls: .init(uniforms: packed)) }
+            packed.replaceSubrange(24..<48, with:pulseOrbit.uniforms)
+            packed[51] = Float(pulseOrbit.time)
+        }
+        return packed
     }
     func frameRendered(output: Bool, outputSession: UUID? = nil, at time: CFTimeInterval) {
         if output {

@@ -275,6 +275,41 @@
         "smoothingSeconds": 8,
         "staleTarget": 0.45
       }
+    ],
+    "09_pulse_orbit": [
+      {
+        "sensor": "racing_speed",
+        "target": "clock.speed",
+        "outputRange": [
+          0.25,
+          1.5
+        ],
+        "clamp": true,
+        "smoothingSeconds": 8,
+        "staleTarget": 1
+      },
+      {
+        "sensor": "visitors",
+        "target": "parameter.directionDrive",
+        "outputRange": [
+          0,
+          1
+        ],
+        "clamp": true,
+        "smoothingSeconds": 12,
+        "staleTarget": 0.72
+      },
+      {
+        "sensor": "racing_speed",
+        "target": "parameter.attraction",
+        "outputRange": [
+          0,
+          1
+        ],
+        "clamp": true,
+        "smoothingSeconds": 8,
+        "staleTarget": 0.12
+      }
     ]
   }
 }

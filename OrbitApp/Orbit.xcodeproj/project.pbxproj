@@ -34,6 +34,7 @@
 		B6033C55F8A1E82FA82B6020 /* OrbitModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C8A50C94742D7DA18CF8FB1 /* OrbitModel.swift */; };
 		BD0312FB7E1888AA3639BBCD /* OrbitLogo.png in Resources */ = {isa = PBXBuildFile; fileRef = 332AC379A0E28B5E029787A2 /* OrbitLogo.png */; };
 		C0BC95029586B3FBB9B29D4A /* OrbitApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADFAA53066E70B7AA6CD3986 /* OrbitApp.swift */; };
+		C8F67C7765720E399F9EA223 /* PulseOrbitSimulation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4538F869E97173ECD41F32F3 /* PulseOrbitSimulation.swift */; };
 		DEE44E606F2F3B5CEB53DF00 /* UpdateInstallationGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F6A65E71EB53A0E54DC9493 /* UpdateInstallationGate.swift */; };
 		F3B5325239EF140CDC65C4A1 /* spectral-fragments-reference.png in Resources */ = {isa = PBXBuildFile; fileRef = 4B03381080881BF0E1A2C350 /* spectral-fragments-reference.png */; };
 		F71A3820A15F0CAF6FBC13B3 /* config in Resources */ = {isa = PBXBuildFile; fileRef = 7E9691F5740D86839DD72043 /* config */; };
@@ -51,6 +52,7 @@
 		3A70140ADF511300B34F9BA1 /* golden-drift-reference.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "golden-drift-reference.png"; sourceTree = "<group>"; };
 		41FC26EB5348B65B7FDAE675 /* ParameterMappingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParameterMappingView.swift; sourceTree = "<group>"; };
 		442ABBD99849283C21E7F61F /* OSCReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OSCReceiver.swift; sourceTree = "<group>"; };
+		4538F869E97173ECD41F32F3 /* PulseOrbitSimulation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PulseOrbitSimulation.swift; sourceTree = "<group>"; };
 		49871CDB0B18BD84E815765F /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		4B03381080881BF0E1A2C350 /* spectral-fragments-reference.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "spectral-fragments-reference.png"; sourceTree = "<group>"; };
 		4B46732B7C89FD49ED6732B3 /* PerformanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceView.swift; sourceTree = "<group>"; };
@@ -146,6 +148,7 @@
 				DD41E236F79EDE0F2637CC5A /* ParameterRouting.swift */,
 				4B46732B7C89FD49ED6732B3 /* PerformanceView.swift */,
 				21B98BBD54F51635F802C526 /* PlaybackTelemetry.swift */,
+				4538F869E97173ECD41F32F3 /* PulseOrbitSimulation.swift */,
 				017234CB6B16D3AD70918CEE /* ReferenceVideoView.swift */,
 				3827D05F51B02F0D685D316A /* RenderBenchmark.swift */,
 				9F6A65E71EB53A0E54DC9493 /* UpdateInstallationGate.swift */,
@@ -253,6 +256,7 @@
 				5B4083000F7E1AE55E9B4ACF /* ParameterRouting.swift in Sources */,
 				6DA94FA414EF86D643B2B599 /* PerformanceView.swift in Sources */,
 				07EC6C5C2ABA39B54D8AB136 /* PlaybackTelemetry.swift in Sources */,
+				C8F67C7765720E399F9EA223 /* PulseOrbitSimulation.swift in Sources */,
 				48822090527C5A268376AE8A /* ReferenceVideoView.swift in Sources */,
 				7D6B7FBC0980DD6B5F4024CB /* RenderBenchmark.swift in Sources */,
 				DEE44E606F2F3B5CEB53DF00 /* UpdateInstallationGate.swift in Sources */,
