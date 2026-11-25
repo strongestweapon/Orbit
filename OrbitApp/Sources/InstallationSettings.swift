@@ -66,6 +66,8 @@ struct GlobalOSCMapping: Identifiable, Codable, Equatable {
     var argument = 0
     var action: GlobalOSCAction
     var sceneID: String?
+    var triggerMode: ParameterInputMode?
+    var threshold: EventThreshold?
     var isValid: Bool {
         address.hasPrefix("/") && address.utf8.count <= 1024 && argument >= 0 && argument < 16
             && !address.unicodeScalars.contains { CharacterSet.whitespacesAndNewlines.contains($0) || CharacterSet.controlCharacters.contains($0) }

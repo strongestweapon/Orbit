@@ -19,6 +19,7 @@ struct OSCMappingView: View {
     @ObservedObject var model: OrbitModel
     let close: () -> Void
     @State private var scope = 0
+    @State private var signalType = 0
     @State private var sceneFilter = ""
     @State private var page = 0
     @State private var selectedID: String?
@@ -29,25 +30,26 @@ struct OSCMappingView: View {
         var result = model.globalOSC.map { route in
             MappingRow(id:route.id.uuidString,
                 title:route.action == .scene ? (model.scenes.first { $0.id == route.sceneID }?.name ?? "씬 선택") : route.action.label,
-                scope:"글로벌 · 수신마다 트리거",address:route.address,active:route.enabled,
+                scope:route.triggerMode == .threshold ? "글로벌 · 임계값 통과" : "글로벌 · 수신마다 트리거",address:route.address,active:route.enabled,
                 value:model.globalReceipts[route.id]?.value,globalID:route.id)
         }
         for scene in model.scenes where !scene.testScene {
             for textured in [false,true] {
                 let routes = (textured ? model.settings[scene.id]?.textureParameterRoutes : model.settings[scene.id]?.parameterRoutes) ?? [:]
                 for (key,route) in routes.sorted(by: { $0.key < $1.key }) {
-                    guard route.input.sensorID != nil || route.input.enabled || route.output.isListed(defaultRoute:ParameterRoute.defaults(scene:scene.id,parameter:key).output) else { continue }
-                    let spec = textured ? ParameterSpec.find(key) : (scene.allParameters.first { $0.id == key }.map { $0.spec(index:0) } ?? ParameterSpec.find(key))
+                    guard route.input.behavior != .continuous || route.input.sensorID != nil || route.input.enabled || route.output.isListed(defaultRoute:ParameterRoute.defaults(scene:scene.id,parameter:key).output) else { continue }
+                    let spec = model.specs(for:scene.id,textured:textured).first {$0.id==key} ?? ParameterSpec.find(key)
                     let sensor = model.sensors.first { $0.id == route.input.sensorID }
                     result.append(MappingRow(id:"\(scene.id):\(textured):\(key)",title:spec.title,
-                        scope:scene.name+(textured ? " · 원본" : ""),address:sensor?.address ?? "입력 연결 없음",
+                        scope:scene.name+(textured ? " · 원본" : "")+" · "+(spec.isTrigger || spec.eventOutput ? "트리거 이벤트" : "연속값"),address:spec.outputOnly ? (spec.eventOutput ? "교차 이벤트 → 출력" : "시뮬레이션 → 출력") : (route.input.sourceParameter.map {source in "영상 값 · "+(model.specs(for:scene.id,textured:textured).first {$0.id==source}?.title ?? source)} ?? sensor?.address ?? "버튼 / 입력 연결 없음"),
                         active:model.selectedSceneID == scene.id && model.usesTexture == textured,
-                        value:sensor?.value,sceneID:scene.id,textured:textured,spec:spec,route:route))
+                        value:spec.outputOnly && model.selectedSceneID == scene.id ? model.controlValue(key) : sensor?.value,sceneID:scene.id,textured:textured,spec:spec,route:route))
                 }
             }
         }
         return result.filter { row in
-            scope == 0 || (scope == 1 ? row.globalID != nil : row.sceneID == (sceneFilter.isEmpty ? model.selectedSceneID : sceneFilter))
+            let event = row.globalID != nil || row.spec?.isTrigger == true || row.spec?.eventOutput == true
+            return (signalType == 0 || (signalType == 1 ? !event : event)) && (scope == 0 || (scope == 1 ? row.globalID != nil : row.sceneID == (sceneFilter.isEmpty ? model.selectedSceneID : sceneFilter)))
         }
     }
     private var selected: MappingRow? { rows.first { $0.id == selectedID } }
@@ -77,6 +79,8 @@ struct OSCMappingView: View {
                     model.globalOSC.append(route);scope=1;selectedID=route.id.uuidString;page=max(0,(model.globalOSC.count-1)/pageSize)
                 }.accessibilityIdentifier("addGlobalOSC")
             }
+            Picker("신호 종류",selection:$signalType) {Text("전체 신호").tag(0);Text("연속값").tag(1);Text("트리거 이벤트").tag(2)}
+                .pickerStyle(.segmented).accessibilityIdentifier("mappingSignalType")
             HStack {
                 Text("수신 주소 / 제어 출력").frame(width:280,alignment:.leading)
                 Text("제어 대상 / 범위").frame(maxWidth:.infinity,alignment:.leading)
@@ -88,14 +92,19 @@ struct OSCMappingView: View {
                         HStack(spacing:12) {
                             VStack(alignment:.leading,spacing:4) {
                                 Text(row.address).font(.system(size:11,design:.monospaced)).lineLimit(1).truncationMode(.middle)
-                                Text(row.route?.output.enabled == true ? "→ "+(row.route?.output.endpointLabel ?? "") : (row.globalID == nil ? "출력 꺼짐" : "≥ 0.5 수신마다 1회 실행"))
+                                Text(row.route?.output.enabled == true ? "→ "+(row.route?.output.endpointLabel ?? "") : (row.globalID == nil ? "출력 꺼짐" : "이벤트 동작"))
                                     .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                             }.frame(width:280,alignment:.leading)
                             VStack(alignment:.leading,spacing:4) {
                                 Text(row.title);Text(row.scope).font(.caption).foregroundStyle(.secondary)
                             }.frame(maxWidth:.infinity,alignment:.leading)
                             VStack(alignment:.trailing,spacing:4) {
-                                Text(row.value.map { String(format:"%.2f",$0) } ?? "—").monospacedDigit()
+                                TimelineView(.periodic(from:.now,by:0.2)) { _ in
+                                    let live = row.spec?.outputOnly == true && row.active ? row.spec.map {model.controlValue($0.id)} : row.value
+                                    if let spec=row.spec, spec.isTrigger, row.active {
+                                        Text("\(model.parameterEventCount(spec.id))회").monospacedDigit()
+                                    } else {Text(live.map {String(format:"%.2f",$0)} ?? "—").monospacedDigit()}
+                                }
                                 Text(row.active ? (row.globalID == nil ? "현재 씬" : "항상 활성") : "비활성").font(.caption).foregroundStyle(.secondary)
                             }.frame(width:125,alignment:.trailing)
                         }.padding(9).frame(height:53)
@@ -120,7 +129,7 @@ struct OSCMappingView: View {
                 } else { parameterEditor(row) }
             } else { Text("매핑을 선택하면 아래에서 설정을 편집합니다.").foregroundStyle(.secondary) }
             Spacer(minLength:0)
-        }.padding(20).frame(width:820,height:680).background(Color(white:0.07)).font(.system(size:12))
+        }.padding(20).frame(width:820,height:710).background(Color(white:0.07)).font(.system(size:12))
             .tint(orbitAccent).accentColor(orbitAccent)
             .buttonStyle(OrbitSecondaryButtonStyle())
             .textFieldStyle(.roundedBorder)
@@ -128,6 +137,7 @@ struct OSCMappingView: View {
                 if let index=rows.firstIndex(where: { $0.id == selectedID }) { page=index/pageSize }
                 else { page=0;selectedID=nil }
             }
+            .onChange(of:signalType) {_,_ in page=0;selectedID=nil}
             .onChange(of:sceneFilter) { _,_ in page=0;selectedID=nil }
             .onChange(of:rows.count) { _,count in page=min(page,max(0,(count-1)/pageSize)) }
             .sheet(item:$editingParameter) { spec in
@@ -140,7 +150,15 @@ struct OSCMappingView: View {
         return VStack(alignment:.leading,spacing:10) {
             HStack {
                 Toggle("활성",isOn:$model.globalOSC[index].enabled)
-                Text("0.5 이상인 패킷마다 실행 · 같은 씬도 처음부터").foregroundStyle(.secondary)
+                Picker("트리거 방식",selection:Binding(get:{route.triggerMode ?? .event},set:{model.globalOSC[index].triggerMode=$0})) {
+                    Text("수신마다 ≥ 0.5").tag(ParameterInputMode.event)
+                    Text("임계값 통과").tag(ParameterInputMode.threshold)
+                }.frame(width:230)
+                if route.triggerMode == .threshold {
+                    TextField("임계값",value:Binding(get:{route.threshold?.level ?? 0.5},set:{value in
+                        var t=route.threshold ?? .init();t.level=value;model.globalOSC[index].threshold=t.sanitized
+                    }),format:.number).frame(width:60)
+                }
                 Spacer()
                 Button("삭제",role:.destructive) { model.globalOSC.removeAll { $0.id == route.id };selectedID=nil }
             }
@@ -168,6 +186,19 @@ struct OSCMappingView: View {
         VStack(alignment:.leading,spacing:10) {
             Text("\(row.scope) · \(row.title)").fontWeight(.medium)
             if let route = row.route, let spec = row.spec, let sceneID = row.sceneID {
+                if spec.outputOnly {
+                    Text(spec.detail).font(.caption).foregroundStyle(.secondary)
+                    if sceneID == model.selectedSceneID {
+                        Button("출력 상세") { editingParameter=spec }
+                    }
+                } else if spec.isTrigger {
+                    Text("독립 트리거 · "+spec.detail).font(.caption).foregroundStyle(.secondary)
+                    HStack {
+                        Toggle("입력 활성",isOn:inputBinding(row,\.enabled,fallback:false))
+                        Spacer()
+                        if row.active {Button("이벤트 실행") {model.triggerParameter(spec.id)};Button("이벤트 입출력 설정") {editingParameter=spec}}
+                    }
+                } else {
                 HStack {
                     Toggle("입력 활성",isOn:inputBinding(row,\.enabled,fallback:false))
                     Picker("센서",selection:inputBinding(row,\.sensorID,fallback:nil)) {
@@ -176,16 +207,19 @@ struct OSCMappingView: View {
                     }
                 }
                 HStack {
-                    Text("0.0–1.0 →")
+                    Text("연속값 · 최소·최대")
                     TextField("최소",value:normalizedInputBinding(row,\.minimum),format:.number.precision(.fractionLength(0...3))).frame(width:75)
                     Text("…")
                     TextField("최대",value:normalizedInputBinding(row,\.maximum),format:.number.precision(.fractionLength(0...3))).frame(width:75)
-                    Text("전환 초")
-                    TextField("초",value:inputBinding(row,\.smoothingSeconds,fallback:8),format:.number).frame(width:65)
+                    if route.input.behavior == .continuous {
+                        Text("전환 초")
+                        TextField("초",value:inputBinding(row,\.smoothingSeconds,fallback:8),format:.number).frame(width:45)
+                    }
                     Spacer()
                     if sceneID == model.selectedSceneID && row.textured == model.usesTexture {
                         Button("입력·출력 상세") { editingParameter=spec }
                     }
+                }
                 }
                 Text("출력: "+(route.output.enabled ? route.output.endpointLabel : "꺼짐")).foregroundStyle(.secondary)
                 if !row.active { Text("이 씬의 설정만 편집합니다. 현재 재생 중인 영상은 유지됩니다.").foregroundStyle(.secondary) }
@@ -206,6 +240,10 @@ struct OSCMappingView: View {
             var routes = (row.textured ? settings.textureParameterRoutes : settings.parameterRoutes) ?? [:]
             var route=routes[spec.id] ?? ParameterRoute.defaults(scene:scene,parameter:spec.id,spec:spec)
             route.input[keyPath:path]=value
+            if spec.isTrigger {
+                route.input.mode = route.input.sourceParameter != nil || route.input.behavior == .threshold ? .threshold : .event
+                route.input.minimum=0;route.output.mode = .event
+            } else {route.input.mode=nil;route.input.sourceParameter=nil;route.output.mode=nil}
             route.input.minimum=spec.clamp(route.input.minimum);route.input.maximum=spec.clamp(route.input.maximum)
             route.input.smoothingSeconds=route.input.smoothingSeconds.isFinite ? min(30,max(0,route.input.smoothingSeconds)) : 0
             routes[spec.id]=route

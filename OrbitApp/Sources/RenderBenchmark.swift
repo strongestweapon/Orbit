@@ -121,8 +121,7 @@ enum RenderBenchmark {
                         uniforms[0] = Float(surface.width); uniforms[1] = Float(surface.height)
                         uniforms[2] = surface.mode; uniforms[3] = phase
                         if uniforms.count == PulseOrbitSimulation.uniformCount {
-                            uniforms.replaceSubrange(24..<48, with: pulseOrbit.uniforms)
-                            uniforms[51] = Float(pulseOrbit.time)
+                            pulseOrbit.writeState(to: &uniforms)
                         }
                         encoder.setRenderPipelineState(request.pipeline)
                         uniforms.withUnsafeBytes { encoder.setFragmentBytes($0.baseAddress!,length:$0.count,index:0) }

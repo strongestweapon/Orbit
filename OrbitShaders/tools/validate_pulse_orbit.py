@@ -15,9 +15,25 @@ def validate(renderer, scene):
         actual=packed[row*300:(row+1)*300,:width,:3].astype(int)
         errors.append(int(np.abs(expected-actual).max()))
     assert max(errors)<=2, errors
+    # Real radial lanes, not a density increase on the original three tracks.
+    for lanes in [4,8,10]:
+        settings={'lineCount':lanes,'rhythmAmount':0,'linkStrength':0,'crossFlash':0}
+        extra,_=renderer.render(scene,15444,300,0,seconds=6,overrides=settings)
+        rows=extra[:,:,:3].max(axis=(1,2))>64
+        starts=np.count_nonzero(rows & ~np.r_[False,rows[:-1]])
+        assert starts==lanes, (lanes,'wrong radial line count',starts)
+        canvas,_=renderer.render(scene,3840,2160,2,seconds=6,overrides=settings)
+        assert not canvas[1500:,:,:3].any() and not canvas[:1500,3564:,:3].any()
+        assert not canvas[1200:1500,1188:,:3].any()
+        for row in range(5):
+            width=3564 if row<4 else 1188
+            assert np.abs(canvas[row*300:(row+1)*300,:width,:3].astype(int)-extra[:,row*3564:row*3564+width,:3].astype(int)).max()<=2
+    effectsOff={'linkStrength':0,'crossFlash':0}
+    bare,_=renderer.render(scene,15444,300,0,seconds=6,overrides=effectsOff)
+    # With interaction layers disabled, preserve independent track palettes.
     # Brightness envelopes vary; hue must remain red / white / red at every pixel.
     for band in range(3):
-        rgb=strip[band*100:(band+1)*100,:,:3]
+        rgb=bare[band*100:(band+1)*100,:,:3]
         assert rgb[:,:,0].max()>128,(band,'missing pulse')
         if band==1:
             assert np.array_equal(rgb[:,:,0],rgb[:,:,1]) and np.array_equal(rgb[:,:,0],rgb[:,:,2])
@@ -26,13 +42,25 @@ def validate(renderer, scene):
     # Recoloring a track must not recolor or move either neighboring track.
     for key,band in [('innerHue',2),('middleHue',1),('outerHue',0)]:
         replacement=0 if key=='middleHue' else 1
-        recolored,_=renderer.render(scene,15444,300,0,seconds=6,overrides={key:replacement})
+        recolored,_=renderer.render(scene,15444,300,0,seconds=6,overrides={**effectsOff,key:replacement})
         for other in range(3):
             region=slice(other*100,(other+1)*100)
             if other==band:
-                assert np.any(strip[region]!=recolored[region])
+                assert np.any(bare[region]!=recolored[region])
             else:
-                assert np.array_equal(strip[region],recolored[region]),(key,'changed another track')
+                assert np.array_equal(bare[region],recolored[region]),(key,'changed another track')
+    # One emitter must remain a continuous arc, even at maximum rhythm strength.
+    # Count circular runs in the actual rendered strip, including the U=0 seam.
+    widths=[]
+    for seconds in [1,3,6,9,12]:
+        frame,_=renderer.render(scene,4096,300,0,seconds=seconds,
+            overrides={**effectsOff,'pulseDensity':0,'rhythmAmount':1,'afterglow':1})
+        for band in range(3):
+            bright=frame[band*100:(band+1)*100,:,:3].max(axis=2)>64
+            arc=bright.any(axis=0)
+            assert np.count_nonzero(arc & ~np.roll(arc,1))<=1, 'A continuous pulse was split into dashes'
+            if arc.any(): widths.append(bright.sum(axis=0).max())
+    assert max(widths)>min(widths)*1.5, 'Missing thick-to-thin stroke changes'
     # Broad sweeps must alternate with quieter packets. Constant occupancy was
     # the previous failure: it looked like rotating UI arcs instead of emitted light.
     energy=[];coverage=[]
@@ -44,19 +72,22 @@ def validate(renderer, scene):
         coverage.append([lit_frame[b*100:(b+1)*100].any(axis=0).mean() for b in range(3)])
     assert max(energy)>min(energy)*2, 'Missing buildup/release in light output'
     assert np.mean(coverage)>0.20 and np.all(np.max(coverage,axis=0)>0.45), 'Missing broad sweeps'
-    frozen={'directionDrive':0.5,'attraction':0,'rhythmAmount':0}
+    frozen={'directionDrive':0.5,'attraction':0,'rhythmAmount':0,'clustering':0}
     a,_=renderer.render(scene,2048,120,0,seconds=3,overrides=frozen)
     b,_=renderer.render(scene,2048,120,0,seconds=8,overrides=frozen)
     assert np.array_equal(a,b), 'Zero drive and rhythm must hold still'
     a,_=renderer.render(scene,2048,120,0,seconds=3,overrides={**frozen,'rhythmAmount':1})
     b,_=renderer.render(scene,2048,120,0,seconds=8,overrides={**frozen,'rhythmAmount':1})
     assert np.abs(a.astype(float)-b.astype(float)).mean()>1, 'Emission must evolve independently of position'
-    lit=(strip[:,:,:3].max(axis=(1,2))>0).astype(int)
+    lit=(bare[:,:,:3].max(axis=(1,2))>0).astype(int)
     assert np.count_nonzero(np.diff(lit)==1)==3, 'Exactly three crisp tracks'
     reverse,_=renderer.render(scene,15444,300,0,seconds=6,overrides={'flipV':1})
     assert np.abs(strip.astype(int)-reverse[::-1].astype(int)).max()<=2
     black,_=renderer.render(scene,1024,96,0,seconds=6,overrides={'brightness':0})
     assert not black[:,:,:3].any()
+    # Links and crossings must contribute outside the three original track bands.
+    gap=(bare[:,:,:3].max(axis=(1,2))==0)
+    assert strip[gap,:,:3].any(), 'Proximity/crossing layers missing in the LED band'
     for control in scene['parameters']:
         # Position wraps: 0 and 1 are intentionally the same twelve-o'clock angle.
         hi=0.5 if control['id'] in ['attractorPosition','innerHue','middleHue','outerHue'] else 1
@@ -69,9 +100,9 @@ def validate(renderer, scene):
     assert np.abs(a.astype(float)-b.astype(float)).mean()>0.25
     # Put an arc at U=0: both ends of the strip must join without a seam.
     seam,_=renderer.render(scene,15444,300,0,seconds=60,
-                          overrides={'directionDrive':0.5,'attraction':1,'attractorPosition':0})
+                          overrides={**effectsOff,'directionDrive':0.5,'attraction':1,'attractorPosition':0,'clustering':0})
     assert seam[:,0,:3].max()>128 and np.abs(seam[:,0,:3].astype(int)-seam[:,-1,:3].astype(int)).max()<=2
-    print('PASS Pulse Orbit: 4K packing, blanking, red/white tracks, independent recoloring, buildup/release, broad sweeps, independent emission, radial flip, fourteen controls, animation, closing seam',flush=True)
+    print('PASS Pulse Orbit: 4K packing, blanking, red/white tracks, independent recoloring, buildup/release, broad sweeps, independent emission, radial flip, 23 controls and interaction layers, animation, closing seam',flush=True)
     return dict(scene=scene['id'],packingMaxByteError=max(errors),passed=True)
 
 if __name__=='__main__':

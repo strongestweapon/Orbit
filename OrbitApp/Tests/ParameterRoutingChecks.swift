@@ -75,6 +75,60 @@ import Foundation
         let encoded = OSCEncoder.floatMessage(address:"/x",value:0.5)!
         precondition(Array(encoded) == [47,120,0,0,44,102,0,0,63,0,0,0])
         precondition(OSCEncoder.floatMessage(address:"/x",value:.nan) == nil)
+        // Old persisted routes retain continuous semantics; new event state never leaks into JSON.
+        precondition(existingOutput.behavior == .continuous)
+        var cue=ParameterInputRoute(enabled:true,sensorID:first.id,minimum:0.2,maximum:0.9,smoothingSeconds:8)
+        cue.mode = .event;cue.event = .init(threshold:.init(),attack:0.1,hold:0.1,release:0.2)
+        var events=ParameterEvents()
+        for value in [0.5,1.0,1.0] { precondition(events.accepts("brightness",value:value,route:cue)) }
+        precondition(!events.accepts("brightness",value:0.49,route:cue))
+        precondition(!events.accepts("brightness",value:.nan,route:cue))
+        events.fire("brightness",route:cue,at:10)
+        let eventRoutes=["brightness":ParameterRoute(input:cue)]
+        close(events.apply(base,routes:eventRoutes,specs:[.find("brightness")],at:10)["brightness"]!,0.2)
+        close(events.apply(base,routes:eventRoutes,specs:[.find("brightness")],at:10.15)["brightness"]!,0.9)
+        close(events.apply(base,routes:eventRoutes,specs:[.find("brightness")],at:10.3)["brightness"]!,0.55)
+        close(events.apply(base,routes:eventRoutes,specs:[.find("brightness")],at:10.5)["brightness"]!,0.2)
+        events.fire("brightness",route:cue,at:11)
+        events.fire("brightness",route:cue,at:11.12)
+        precondition(events.counts["brightness"]==3)
+        close(events.apply(base,routes:eventRoutes,specs:[.find("brightness")],at:11.17)["brightness"]!,0.55)
+        var manual=cue;manual.enabled=false
+        events.fire("brightness",route:manual,at:20)
+        close(events.apply(base,routes:["brightness":ParameterRoute(input:manual)],specs:[.find("brightness")],at:20.15)["brightness"]!,0.9)
+        close(events.apply(base,routes:["brightness":ParameterRoute(input:manual)],specs:[.find("brightness")],at:20.6)["brightness"]!,0.2)
+        var threshold=ThresholdLatch()
+        let levels:[Double]=[0.2,0.49,0.5,0.8,1,0.49,0.5,0.44,0.51]
+        precondition(levels.map {threshold.accept($0,settings:.init())} == [false,false,true,false,false,false,false,false,true])
+        var prime=ThresholdLatch()
+        precondition(!prime.accept(1,settings:.init(),fireFirst:false))
+        precondition(!prime.accept(1,settings:.init()))
+        precondition(!prime.accept(0.1,settings:.init()))
+        precondition(prime.accept(0.5,settings:.init()))
+        var thresholdCue=cue;thresholdCue.mode = .threshold
+        events.reset()
+        precondition(events.accepts("brightness",value:0.8,route:thresholdCue))
+        precondition(!events.accepts("brightness",value:0.8,route:thresholdCue))
+        let eventReload=try JSONDecoder().decode(ParameterInputRoute.self,from:JSONEncoder().encode(cue))
+        precondition(eventReload==cue)
+        var eventResolver=ParameterResolver()
+        close(eventResolver.resolve(base:base,routes:eventRoutes,sensors:[first],now:now,delta:2)["brightness"]!,base["brightness"]!)
+        // Existing event-on-slider mappings migrate to their own command IDs exactly once.
+        var legacyEvent=ParameterRoute.defaults(scene:"sample",parameter:"brightness")
+        legacyEvent.input=cue;legacyEvent.output.enabled=true;legacyEvent.output.mode = .event
+        legacyEvent.output.address="/saved/cue"
+        var separated=SceneSettings(values:["brightness":0.4],speed:1,parameterRoutes:["brightness":legacyEvent])
+        separated.separateTriggerRoutes(scene:"sample",specs:[.find("brightness")],textured:false)
+        let moved=separated.parameterRoutes!["trigger.parameter.brightness"]!
+        precondition(moved.input.sensorID==cue.sensorID && moved.input.enabled && moved.input.legacyTarget==0.9)
+        precondition(moved.output.enabled && moved.output.address=="/saved/cue")
+        precondition(separated.parameterRoutes!["brightness"]!.input.behavior == .continuous)
+        precondition(!separated.parameterRoutes!["brightness"]!.input.enabled && !separated.parameterRoutes!["brightness"]!.output.enabled)
+        close(Double(separated.values["brightness"]!),0.2)
+        let once=separated.parameterRoutes
+        separated.separateTriggerRoutes(scene:"sample",specs:[.find("brightness")],textured:false)
+        precondition(once==separated.parameterRoutes)
+        precondition(ParameterSpec.find("trigger.discharge").isTrigger && !ParameterSpec.find("brightness").isTrigger)
         print("PASS: simultaneous routes, smoothing, stale/deleted inputs, legacy migration, connection list persistence, sensor states, MIDI scaling, OSC wire bytes")
     }
     static func close(_ a:Double,_ b:Double) {precondition(abs(a-b)<0.000001,"\(a) != \(b)")}

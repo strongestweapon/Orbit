@@ -92,6 +92,26 @@ final class Received {
         sender.reset();sender.send(messages)
         wait("reset/resume MIDI packets") {received.snapshot().0.count>=4}
         wait("reset/resume UDP packets") {received.snapshot().1.count>=3}
+        let before=received.snapshot()
+        var angle=osc;angle.address="/event/angle"
+        var trigger=osc;trigger.address="/event/crossing"
+        let event=[ControlEmission(id:"angle",route:angle,value:0.3),ControlEmission(id:"trigger",route:trigger,value:1)]
+        for _ in 0..<3 { sender.sendEvents(event) }
+        wait("three identical bundled events") {received.snapshot().1.count>=before.1.count+3}
+        let bundles=Array(received.snapshot().1.suffix(3))
+        precondition(bundles.allSatisfy {$0.starts(with:Data("#bundle\0".utf8))})
+        precondition(bundles.allSatisfy {OSCDecoder.decode($0).map(\.address)==["/event/angle","/event/crossing"]})
+        precondition(bundles.allSatisfy {OSCDecoder.decode($0).last?.values == [1]})
+        let count=received.snapshot().1.count
+        sender.send([],retaining:[trigger,angle]);pump(2.2)
+        precondition(received.snapshot().1.count==count,"Event channels must not heartbeat/replay")
+        sender.sendEvents(event)
+        wait("event-only connection retained") {received.snapshot().1.count==count+1}
+        sender.sendEvents([ControlEmission(id:"edge",route:midi,value:0),ControlEmission(id:"edge",route:midi,value:127)])
+        sender.sendEvents([ControlEmission(id:"edge",route:midi,value:0),ControlEmission(id:"edge",route:midi,value:127)])
+        wait("MIDI retrigger edges") {received.snapshot().0.count>=before.0.count+4}
+        precondition(received.snapshot().0.suffix(4).map {$0 & 0x7f} == [0,127,0,127])
+        print("PASS: bundles, identical repeated events, no heartbeat, MIDI trigger edges")
         print("PASS: real CoreMIDI + UDP loopback, per-parameter delivery status/values, change coalescing, forced test, reset/resume")
         withExtendedLifetime(sender) {}
     }

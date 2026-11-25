@@ -95,18 +95,24 @@ final class OrbitModel: ObservableObject {
     }
     var updateInstallationInProgress = false
     @Published var controlOutputStatus = "제어 자동 송신 꺼짐"
-    @Published private(set) var controlDeliveries: [String:ControlDelivery] = [:]
+    // Connection cards poll receipts independently; a network packet must not relayout Metal views.
+    private(set) var controlDeliveries: [String:ControlDelivery] = [:]
     let receiver = OSCReceiver()
     let telemetry = PlaybackTelemetry()
     let performance = PerformanceMeasurement()
     private var previewSurfaces: [Float:BenchmarkSurface] = [:]
-    let controlOutput = ControlOutput()
+    let controlOutput: ControlOutput
     let comparison = ComparisonPlayback()
     let textureSource = OrbitGPU.shared.device.map { OrbitTextureSource(device:$0) }
     private var phaseTime: Double = 0
     private var pulseOrbit = PulseOrbitSimulation()
+    private var lastPulseCrossing: PulseOrbitSimulation.Crossing?
+    private(set) var pulseCrossingCount = 0
     private var lastTime = CACurrentMediaTime()
     private var parameterResolver = ParameterResolver()
+    private var parameterEvents = ParameterEvents()
+    private var globalThresholds: [UUID:ThresholdLatch] = [:]
+    private var globalThresholdRoutes: [UUID:GlobalOSCMapping] = [:]
     private var controlTimer: Timer?
     private var lastControlTime = CACurrentMediaTime()
     private var outputController: OrbitOutputWindowController?
@@ -145,12 +151,23 @@ final class OrbitModel: ObservableObject {
             return route?.input.enabled == true || route?.output.enabled == true
         }
     }
-    var parameterSpecs: [ParameterSpec] {
-        if usesTexture || selectedScene?.testScene == true { return ParameterSpec.all }
-        let excluded = ["density","turbulence","energy","rotation"] + (selectedSceneID == PulseOrbitSimulation.sceneID ? ["hueShift"] : [])
-        let common = ParameterSpec.all.filter { !excluded.contains($0.id) }
-        return common + allShaderParameters.enumerated().map { $0.element.spec(index:$0.offset) }
+    private func continuousSpecs(scene: SceneDescriptor, textured: Bool) -> [ParameterSpec] {
+        if textured || scene.testScene {return ParameterSpec.all}
+        let excluded=["density","turbulence","energy","rotation"]+(scene.id == PulseOrbitSimulation.sceneID ? ["hueShift"] : [])
+        return ParameterSpec.all.filter {!excluded.contains($0.id)} + scene.allParameters.enumerated().map {$0.element.spec(index:$0.offset)}
+            + (scene.id == PulseOrbitSimulation.sceneID ? PulseOrbitOutputs.specs : [])
     }
+    func triggers(for sceneID: String, textured: Bool) -> [SceneTrigger] {
+        guard let scene=scenes.first(where:{$0.id==sceneID}),!scene.testScene else {return []}
+        let routes=(textured ? settings[sceneID]?.textureParameterRoutes : settings[sceneID]?.parameterRoutes) ?? [:]
+        return SceneTrigger.catalog(scene:sceneID,textured:textured)+SceneTrigger.converted(routes:routes,specs:continuousSpecs(scene:scene,textured:textured))
+    }
+    var sceneTriggers: [SceneTrigger] {triggers(for:selectedSceneID,textured:usesTexture)}
+    func specs(for sceneID: String, textured: Bool) -> [ParameterSpec] {
+        guard let scene=scenes.first(where:{$0.id==sceneID}) else {return []}
+        return continuousSpecs(scene:scene,textured:textured)+triggers(for:sceneID,textured:textured).map(\.spec)
+    }
+    var parameterSpecs: [ParameterSpec] {specs(for:selectedSceneID,textured:usesTexture)}
     func parameterSpec(_ key: String) -> ParameterSpec { parameterSpecs.first { $0.id == key } ?? .find(key) }
     var manualPlaybackSpeed: Float { usesTexture ? (activeSettings.values["texture.speed"] ?? 1) : activeSettings.speed }
     var playbackSpeed: Float { Float(parameterValues["speed"] ?? Double(manualPlaybackSpeed)) }
@@ -194,7 +211,8 @@ final class OrbitModel: ObservableObject {
     var customOutputHeight: Int { OutputGeometry.normalizedWidth(customOutputWidth)/16*9 }
     func normalizeOutputWidth() { customOutputWidth = OutputGeometry.normalizedWidth(customOutputWidth) }
 
-    init(defaults: UserDefaults = .standard, resources: Bundle = .main) {
+    init(defaults: UserDefaults = .standard, resources: Bundle = .main, controlOutput: ControlOutput = ControlOutput()) {
+        self.controlOutput = controlOutput
         self.defaults = defaults; self.resources = resources
         do {
             guard let url = resources.url(forResource: "scenes", withExtension: "json", subdirectory: "config") else {
@@ -262,7 +280,12 @@ final class OrbitModel: ObservableObject {
                 resumeOnLaunch = stored.installation?.resumeOnLaunch ?? true
             }
         } catch { errorMessage = error.localizedDescription }
-        for key in Array(settings.keys) { settings[key]?.migrateRoutes(scene:key) }
+        for scene in scenes {
+            settings[scene.id]?.migrateRoutes(scene:scene.id)
+            for textured in [false,true] {
+                settings[scene.id]?.separateTriggerRoutes(scene:scene.id,specs:continuousSpecs(scene:scene,textured:textured),textured:textured)
+            }
+        }
         textureSource?.onReady = { [weak self] in self?.textureStatus = "텍스처 재생 준비됨" }
         textureSource?.onError = { [weak self] message in
             self?.textureStatus = "텍스처 읽기 실패"; self?.errorMessage = message
@@ -342,12 +365,27 @@ final class OrbitModel: ObservableObject {
             }
         }
     }
+    /// Live simulation signals stay outside the published shader-control dictionary.
+    func controlValue(_ key: String) -> Double {
+        if key.hasPrefix("trigger.") { return triggerLevels()[key] ?? 0 }
+        if selectedSceneID == PulseOrbitSimulation.sceneID {
+            switch key {
+            case PulseOrbitOutputs.trigger: return lastPulseCrossing.map { pulseOrbit.time-$0.time < 0.1 ? 1 : 0 } ?? 0
+            case PulseOrbitOutputs.angle: return lastPulseCrossing?.angle ?? 0
+            case PulseOrbitOutputs.strength: return lastPulseCrossing?.strength ?? 0
+            case PulseOrbitOutputs.proximity: return pulseOrbit.proximity
+            default: break
+            }
+        }
+        return parameterValues[key] ?? baseParameterValue(key)
+    }
     func value(_ name: String) -> Float { Float(parameterValues[name] ?? Double(effectiveValues[name] ?? 0)) }
     func baseParameterValue(_ key: String) -> Double { key == "speed" ? Double(manualPlaybackSpeed) : Double(effectiveValues[key] ?? 0) }
     func normalizedParameterValue(_ key: String) -> Double {
-        parameterSpec(key).normalized(parameterValues[key] ?? baseParameterValue(key))
+        parameterSpec(key).normalized(controlValue(key))
     }
     func setNormalizedParameterValue(_ key: String, _ value: Double) {
+        guard !parameterSpec(key).outputOnly,!parameterSpec(key).isTrigger else { return }
         let raw = Float(parameterSpec(key).rawValue(normalized:value))
         if key == "speed" { setSpeed(raw) } else { setValue(key,raw) }
     }
@@ -366,7 +404,7 @@ final class OrbitModel: ObservableObject {
         stopOutput()
     }
     func setValue(_ name: String, _ value: Float) {
-        guard value.isFinite else { return }
+        guard value.isFinite, !parameterSpec(name).outputOnly,!parameterSpec(name).isTrigger else { return }
         let key = usesTexture && textureDefaults[name] != nil ? "texture." + name : name
         settings[selectedSceneID]?.values[key] = value
         refreshParameters(delta:0)
@@ -385,8 +423,10 @@ final class OrbitModel: ObservableObject {
         setTextureMode(style == 1)
     }
     func restartPlayback() {
+        parameterEvents.reset()
         phaseTime = 0; lastTime = CACurrentMediaTime()
         pulseOrbit = PulseOrbitSimulation()
+        lastPulseCrossing = nil; pulseCrossingCount = 0
         telemetry.updateTime(0,force:true)
         comparison.invalidatePosition()
     }
@@ -415,8 +455,26 @@ final class OrbitModel: ObservableObject {
     func setRoute(_ key: String, _ update: (inout ParameterRoute) -> Void) {
         var route = route(for:key); let prior = route; update(&route)
         let spec = parameterSpec(key)
+        if spec.outputOnly { route.input = ParameterInputRoute() }
+        if spec.isTrigger {
+            route.input.mode = route.input.sourceParameter != nil || route.input.behavior == .threshold ? .threshold : .event
+            route.input.minimum=0;route.input.maximum=spec.clamp(route.input.maximum)
+            route.output.mode = .event
+        } else {
+            route.input.mode=nil;route.input.sourceParameter=nil;route.output.mode=nil
+        }
+        if spec.isTrigger || spec.id == PulseOrbitOutputs.trigger {
+            route.output.minimum = 0; route.output.maximum = route.output.transport == .midi ? 127 : 1
+        }
         route.input.minimum = spec.clamp(route.input.minimum)
         route.input.maximum = spec.clamp(route.input.maximum)
+        if key == SceneTrigger.addLineID {
+            route.input.lineLimit=min(PulseOrbitSimulation.maximumLineCount,max(4,route.input.lineLimit ?? PulseOrbitSimulation.maximumLineCount))
+            if pulseOrbit.lineCount > route.input.lineLimit! {pulseOrbit.setLineCount(PulseOrbitSimulation.defaultLineCount);lastPulseCrossing=nil}
+        }
+        if let event=route.input.event { route.input.event=event.sanitized }
+        if let threshold=route.output.threshold { route.output.threshold=threshold.sanitized }
+        if prior.input != route.input { parameterEvents.clear(key) }
         route.input.smoothingSeconds = route.input.smoothingSeconds.isFinite ? min(30,max(0,route.input.smoothingSeconds)) : 8
         if !route.output.minimum.isFinite { route.output.minimum = prior.output.minimum }
         if !route.output.maximum.isFinite { route.output.maximum = prior.output.maximum }
@@ -439,12 +497,16 @@ final class OrbitModel: ObservableObject {
         controlOutputEnabled = false
         setRoute(key) { $0.output.configured = true }
         let route = route(for:key).output
-        if let value = route.mappedValue(parameterValues[key] ?? baseParameterValue(key),spec:spec) {
+        if spec.isTrigger || (route.sendsEvents(spec:spec) && !spec.eventOutput) {
+            sendParameterEvent(key,test:true)
+        } else if spec.eventOutput {
+            controlOutput.sendEvents(pulseEventEmissions(for:[spec],values:[key:key == PulseOrbitOutputs.trigger ? 1 : controlValue(key)]),test:true)
+        } else if let value = route.mappedValue(controlValue(key),spec:spec) {
             controlOutput.send([ControlEmission(id:controlEmissionID(key),route:route,value:value)],force:true)
         }
     }
     private func resetParameterState() {
-        parameterResolver.reset(); controlOutput.reset(); lastControlTime = CACurrentMediaTime()
+        parameterResolver.reset(); parameterEvents.reset(); controlOutput.reset(); lastControlTime = CACurrentMediaTime()
         refreshParameters(delta:0)
     }
     private func refreshParameters(delta: Double) {
@@ -453,13 +515,76 @@ final class OrbitModel: ObservableObject {
         var resolved = parameterResolver.resolve(base:base,routes:routes,sensors:sensors,now:Date(),delta:delta,specs:parameterSpecs)
         if usesTexture { resolved["markerWidth"] = (resolved["rotation"] ?? 0)*0.1 }
         if parameterValues != resolved { parameterValues = resolved }
+        for event in sceneTriggers {
+            let input=route(for:event.id).input
+            guard let source=input.sourceParameter,let spec=parameterSpecs.first(where:{$0.id==source && !$0.isTrigger && !$0.eventOutput}) else {continue}
+            if parameterEvents.accepts(event.id,value:spec.normalized(controlValue(source)),route:input,fireFirst:false) {triggerParameter(event.id)}
+        }
         guard controlOutputEnabled else { return }
         let emissions = parameterSpecs.compactMap { spec -> ControlEmission? in
-            guard let route = routes[spec.id]?.output, route.enabled, outputIssue(for:spec.id) == nil,
-                  let value = route.mappedValue(resolved[spec.id] ?? baseParameterValue(spec.id),spec:spec) else { return nil }
+            guard let route = routes[spec.id]?.output, !route.sendsEvents(spec:spec), route.enabled, outputIssue(for:spec.id) == nil,
+                  let value = route.mappedValue(spec.outputOnly ? controlValue(spec.id) : (resolved[spec.id] ?? baseParameterValue(spec.id)),spec:spec) else { return nil }
             return ControlEmission(id:controlEmissionID(spec.id),route:route,value:value)
         }
-        controlOutput.send(emissions)
+        let eventRoutes = parameterSpecs.filter { route(for:$0.id).output.sendsEvents(spec:$0) }.compactMap { spec -> ParameterOutputRoute? in
+            let route = routes[spec.id]?.output
+            return route?.enabled == true && outputIssue(for:spec.id) == nil ? route : nil
+        }
+        controlOutput.send(emissions,retaining:eventRoutes)
+    }
+    func setInputBehavior(_ key: String, _ mode: ParameterInputMode) {
+        guard parameterSpec(key).isTrigger else {return}
+        setRoute(key) {$0.input.mode = mode == .threshold ? .threshold : .event}
+    }
+    var pulseLineCount: Int {pulseOrbit.lineCount}
+    var pulseLineLimit: Int {min(PulseOrbitSimulation.maximumLineCount,max(4,route(for:SceneTrigger.addLineID).input.lineLimit ?? PulseOrbitSimulation.maximumLineCount))}
+    func parameterEventCount(_ key: String) -> Int { parameterEvents.counts[key] ?? 0 }
+    func triggerLevels() -> [String:Double] {
+        let events=sceneTriggers
+        let routes=Dictionary(uniqueKeysWithValues:events.map {($0.id,activeRoutes[$0.id] ?? ParameterRoute.defaults(scene:selectedSceneID,parameter:$0.id,spec:$0.spec))})
+        return parameterEvents.apply(Dictionary(uniqueKeysWithValues:events.map {($0.id,0.0)}),routes:routes,specs:events.map(\.spec),at:CACurrentMediaTime())
+    }
+    /// Trigger IDs are commands, never writable continuous controls.
+    func triggerParameter(_ key: String) {
+        let spec=parameterSpec(key),route=route(for:key)
+        guard selectedScene?.testScene == false,spec.isTrigger,!isShuttingDown else { return }
+        if key == SceneTrigger.addLineID, selectedSceneID == PulseOrbitSimulation.sceneID, !usesTexture {
+            pulseOrbit.addLine(limit:pulseLineLimit);lastPulseCrossing=nil
+        }
+        parameterEvents.fire(key,route:route.input,at:CACurrentMediaTime())
+        if controlOutputEnabled && route.output.enabled {sendParameterEvent(key)}
+    }
+    private func sendParameterEvent(_ key: String, test: Bool = false) {
+        guard outputIssue(for:key) == nil else { return }
+        let route=route(for:key).output,id=controlEmissionID(key)
+        // OSC receivers consume a single float cue. MIDI Remote receives a fresh rising edge.
+        var events: [ControlEmission] = []
+        if route.transport == .midi { events.append(.init(id:id,route:route,value:0)) }
+        events.append(.init(id:id,route:route,value:route.transport == .midi ? 127 : 1))
+        controlOutput.sendEvents(events,test:test)
+    }
+    private func pulseEventEmissions(for specs: [ParameterSpec], values: [String:Double]) -> [ControlEmission] {
+        specs.flatMap { spec -> [ControlEmission] in
+            let route = route(for:spec.id).output
+            guard outputIssue(for:spec.id) == nil, let raw = values[spec.id], let value = route.mappedValue(raw,spec:spec) else { return [] }
+            let event = ControlEmission(id:controlEmissionID(spec.id),route:route,value:value)
+            if spec.id == PulseOrbitOutputs.trigger && route.transport == .midi {
+                return [ControlEmission(id:event.id,route:route,value:route.minimum),event]
+            }
+            return [event]
+        }
+    }
+    private func deliverPulseCrossings() {
+        for crossing in pulseOrbit.takeCrossings() {
+            lastPulseCrossing = crossing; pulseCrossingCount += 1
+            guard controlOutputEnabled, !isShuttingDown else { continue }
+            // Metadata first, then trigger; OSC bundles keep all selected fields in one datagram.
+            let specs = [PulseOrbitOutputs.angle,PulseOrbitOutputs.strength,PulseOrbitOutputs.trigger].compactMap { key in
+                parameterSpecs.first { $0.id == key && route(for:key).output.enabled }
+            }
+            let values = [PulseOrbitOutputs.trigger:1, PulseOrbitOutputs.angle:crossing.angle, PulseOrbitOutputs.strength:crossing.strength]
+            controlOutput.sendEvents(pulseEventEmissions(for:specs,values:values))
+        }
     }
     func addSensor() {
         sensors.append(SensorInput(name: "센서 \(sensors.count + 1)", address: "/park/sensor/\(sensors.count + 1)"))
@@ -482,21 +607,37 @@ final class OrbitModel: ObservableObject {
         }
         receiver.start(port: number); save()
     }
-    func stopOSC() { oscSessionID=UUID();receiver.stop(); oscRunning = false; oscState = "수신 꺼짐"; scheduleSave() }
+    func stopOSC() { globalThresholds.removeAll();globalThresholdRoutes.removeAll();parameterEvents.reset();oscSessionID=UUID();receiver.stop(); oscRunning = false; oscState = "수신 꺼짐"; scheduleSave() }
 
     func receiveOSC(address: String, values: [Double]) {
         guard !isShuttingDown else { return }
         lastMessage = address + "  " + values.map { OSCValue.normalized($0).map { String(format:"%.2f",$0) } ?? "실수 필요" }.joined(separator:", ")
+        var received: [(UUID,Double)] = []
         for i in sensors.indices where sensors[i].address == address {
             let argument = sensors[i].argument
             if values.indices.contains(argument), let value = OSCValue.normalized(values[argument]) {
                 sensors[i].value = value; sensors[i].receivedAt = Date()
+                received.append((sensors[i].id,value))
             }
+        }
+        // Process each packet immediately, never infer an event from a cached sensor value.
+        if selectedScene?.testScene == false {
+            for (sensorID,value) in received {
+                for spec in parameterSpecs where spec.isTrigger {
+                    let input=route(for:spec.id).input
+                    if input.sourceParameter == nil && input.sensorID == sensorID && parameterEvents.accepts(spec.id,value:value,route:input) { triggerParameter(spec.id) }
+                }
+            }
+            refreshParameters(delta:0)
         }
         // Iterate messages, not changed values: repeated high cues must restart again.
         for route in globalOSC where route.address == address && route.isValid {
             guard values.indices.contains(route.argument), let value = OSCValue.normalized(values[route.argument]) else { continue }
-            let fires = route.accepts(address:address,values:values)
+            if globalThresholdRoutes[route.id] != route { globalThresholds.removeValue(forKey:route.id);globalThresholdRoutes[route.id]=route }
+            let fires: Bool
+            if route.enabled && route.triggerMode == .threshold {
+                fires=globalThresholds[route.id,default:ThresholdLatch()].accept(value,settings:route.threshold ?? .init())
+            } else { fires=route.accepts(address:address,values:values) }
             let count = globalReceipts[route.id]?.triggerCount ?? 0
             globalReceipts[route.id] = OSCReceipt(value:value,receivedAt:Date(),triggerCount:count+(fires ? 1 : 0))
             if fires { performGlobalAction(route) }
@@ -549,9 +690,9 @@ final class OrbitModel: ObservableObject {
     func uniforms(width: Float, height: Float, view: Float) -> [Float] {
         // A shared monotonic clock for every preview and output. Rendering delays must not slow time.
         let now = CACurrentMediaTime(); let delta = max(0, now - lastTime); lastTime = now
-        var values = parameterValues.mapValues(Float.init)
+        var values = SceneTrigger.renderValues(base:parameterValues,events:sceneTriggers,levels:triggerLevels(),specs:parameterSpecs).mapValues(Float.init)
         for parameter in allShaderParameters { values[parameter.uniform] = values[parameter.id] ?? Float(parameter.defaultValue) }
-        let speed = playbackSpeed
+        let speed = values["speed"] ?? playbackSpeed
         if playing { phaseTime += delta * Double(speed) }
         if usesTexture, let scene = selectedScene, let original = scene.texture {
             let texture = original
@@ -574,9 +715,16 @@ final class OrbitModel: ObservableObject {
             packed += pulseOrbit.uniforms
             packed += [values["laneHue0"] ?? 0, values["laneHue1"] ?? 1, values["laneHue2"] ?? 0, Float(pulseOrbit.time)]
             packed += [values["motion0"] ?? 0.85, values["motion1"] ?? 0.55, values["motion2"] ?? 0.65, values["motion3"] ?? 1]
-            if playing { pulseOrbit.advance(by: delta * Double(speed), controls: .init(uniforms: packed)) }
-            packed.replaceSubrange(24..<48, with:pulseOrbit.uniforms)
-            packed[51] = Float(pulseOrbit.time)
+            packed += [values["orbit0"] ?? 0.35, values["orbit1"] ?? 1/3, values["orbit2"] ?? 1/3,
+                       values["orbit3"] ?? 1/3, values["orbit4"] ?? 1,
+                       values["link0"] ?? 0.375, values["link1"] ?? 0.65, values["link2"] ?? 0.7, values["link3"] ?? 0.35]
+            packed += pulseOrbit.eventUniforms
+            packed += pulseOrbit.extendedUniforms
+            if playing {
+                pulseOrbit.advance(by: delta * Double(speed), controls: .init(uniforms: packed))
+                deliverPulseCrossings()
+            }
+            pulseOrbit.writeState(to: &packed)
         }
         return packed
     }

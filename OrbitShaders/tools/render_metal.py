@@ -42,7 +42,9 @@ class MetalRenderer:
             atexit.register(close_probe)
         request=dict(seconds=params['phaseTime'],drive=params['density'],attraction=params['turbulence'],
                      inertia=params['energy'],center=params['shape0'],dynamics=params['motion0'],
-                     rhythmRate=params['motion1'],counterflow=params['motion3']>=0.5)
+                     rhythmRate=params['motion1'],counterflow=params['motion3']>=0.5,
+                     clustering=params['orbit0'],laneRates=[params['orbit1'],params['orbit2'],params['orbit3']],
+                     outerReverse=params['orbit4']>=0.5,linkRange=params['link0'],density=params['shape2'],lineCount=int(params.get('lineCount',3)))
         self.pulse_probe.stdin.write(json.dumps(request)+'\n');self.pulse_probe.stdin.flush()
         return json.loads(self.pulse_probe.stdout.readline())
 
@@ -75,6 +77,11 @@ class MetalRenderer:
             raw+=struct.pack('<24f',*state[:24])
             raw+=struct.pack('<8f',params['laneHue0'],params['laneHue1'],params['laneHue2'],state[24],
                              params['motion0'],params['motion1'],params['motion2'],params['motion3'])
+            raw+=struct.pack('<9f',*(params[k] for k in scene['uniformBuffer']['interactionControls']))
+            raw+=struct.pack('<49f',*state[25:74])
+            extra=state[74:]
+            raw+=struct.pack('<'+str(len(extra))+'f',*extra)
+            assert len(raw)==scene['uniformBuffer']['sizeBytes']
         ctypes.memmove(self.uniforms.contents(),raw,len(raw))
         size=width*height*4
         if size not in self.buffers: self.buffers[size]=self.device.newBufferWithLength_options_(size,0)

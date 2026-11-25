@@ -71,15 +71,17 @@ fragment float4 orbit_pulse_orbit_fragment(float4 position [[position]],
     (ROOT/'metal'/f'{sid}.metal').write_text(metal)
     defaults = dict(zip(LAYOUT, [1280,720,1,0,.72,.12,.55,0,1,3,0,0,0,.128,0,12,1,.8,.25,0,0,.62,.86,.55]))
     defaults.update({p['id']:p['defaultValue'] for p in PARAMETERS[sid]})
-    return dict(id=sid,name='Pulse Orbit',description='레드·화이트 펄스 · 방향, 중력과 관성',
+    return dict(id=sid,name='Pulse Orbit',description='레드·화이트 펄스 · 근접 연결과 교차 파동',
                 referenceSeconds=None,referenceImage=None,texture=None,
                 metal=f'metal/{sid}.metal',isf=None,computeFunction='orbit_pulse_orbit_compute',
                 fragmentFunction='orbit_pulse_orbit_fragment',parameters=PARAMETERS[sid],
                 compatibilityParameters=[],defaults=defaults,defaultClockSpeed=1,
                 sensorMappingEnabled=True,testScene=False,nativeSimulation='pulseOrbit',
-                uniformBuffer=dict(sizeBytes=224,baseFloatCount=24,positions=12,velocities=12,
+                uniformBuffer=dict(sizeBytes=684,baseFloatCount=24,positions=12,velocities=12,
                                    trackHues=['laneHue0','laneHue1','laneHue2'],simulationTimeFloat=51,
-                                   motionControls=['motion0','motion1','motion2','motion3']))
+                                   motionControls=['motion0','motion1','motion2','motion3'],
+                                   interactionControls=['orbit0','orbit1','orbit2','orbit3','orbit4','link0','link1','link2','link3'],
+                                   eventFloatOffset=65,eventCount=16,eventFields=['angle','time','strength'],substepRemainderFloat=113,extraPositions=28,extraVelocities=28,lineCountFloat=170,maximumLines=10))
 
 def main():
     common = (ROOT/'src/common.glsl').read_text()
@@ -233,6 +235,6 @@ vertex float4 orbit_fullscreen_vertex(uint id [[vertex_id]]) {
            'clamp':True,'smoothingSeconds':8,'staleTarget':second_control['defaultValue']}]
     (ROOT/'config/osc-mappings.example.json').write_text(json.dumps(mappings,ensure_ascii=False,indent=2)+'\n')
     build_texture_shader()
-    print(f'Built {len(SCENES)+1} Metal shaders and {len(SCENES)} ISF generators; Pulse Orbit uses a 224-byte stateful layout.')
+    print(f'Built {len(SCENES)+1} Metal shaders and {len(SCENES)} ISF generators; Pulse Orbit uses a 684-byte stateful layout.')
 
 if __name__=='__main__': main()

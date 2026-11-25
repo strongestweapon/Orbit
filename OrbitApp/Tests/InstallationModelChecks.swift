@@ -30,7 +30,7 @@ import AppKit
         // The UI conversion changes neither stored native values nor the shader's available range.
         for scene in restored.scenes where !scene.testScene {
             restored.selectedSceneID=scene.id
-            for spec in restored.parameterSpecs {
+            for spec in restored.parameterSpecs where !spec.outputOnly && !spec.isTrigger {
                 let original=restored.baseParameterValue(spec.id)
                 let unit=spec.normalized(original)
                 precondition((0...1).contains(unit))
@@ -56,6 +56,12 @@ import AppKit
         precondition(initial.count==PulseOrbitSimulation.uniformCount && Array(initial[24..<48])==PulseOrbitSimulation().uniforms)
         precondition(initial[48]==0 && initial[49]==1 && initial[50]==0)
         precondition(abs(initial[52]-0.85)<0.00001 && abs(initial[53]-0.55)<0.00001 && abs(initial[54]-0.65)<0.00001 && initial[55]==1)
+        precondition(abs(initial[56]-0.35)<0.00001 && initial[60]==1 && abs(initial[62]-0.65)<0.00001)
+        restored.setNormalizedParameterValue("outerReverse",0.2)
+        restored.setNormalizedParameterValue("linkStrength",0.8)
+        let interaction=restored.uniforms(width:1920,height:1080,view:1)
+        precondition(interaction[60]==0 && abs(interaction[62]-0.8)<0.00001)
+        precondition(Array(interaction[65..<114])==Array(initial[65..<114]),"Paused interaction edits must preserve event history")
         restored.setNormalizedParameterValue("counterflow",0.2)
         restored.setNormalizedParameterValue("rhythmAmount",0.4)
         let motion=restored.uniforms(width:1920,height:1080,view:1)
@@ -74,6 +80,7 @@ import AppKit
         restored.resetSceneAppearance()
         precondition(restored.normalizedParameterValue("middleHue")==1)
         precondition(abs(restored.normalizedParameterValue("rhythmAmount")-0.85)<0.00001 && restored.normalizedParameterValue("counterflow")==1)
+        precondition(restored.normalizedParameterValue("outerReverse")==1 && abs(restored.normalizedParameterValue("linkStrength")-0.65)<0.00001)
         precondition(restored.route(for:"directionDrive").input.enabled)
         precondition(abs(restored.normalizedParameterValue("pulseLength")-0.62)<0.00001)
         precondition(Array(restored.uniforms(width:3840,height:2160,view:2)[24..<48])==PulseOrbitSimulation().uniforms)

@@ -160,7 +160,8 @@ private struct OutputConnectionCard: View {
         if let delivery=model.controlDelivery(for:spec.id), delivery.error == nil {
             return "송신 "+format(delivery.value)
         }
-        let value=model.parameterValues[spec.id] ?? model.baseParameterValue(spec.id)
+        if spec.isTrigger || (route.sendsEvents(spec:spec) && !spec.eventOutput) { return "이벤트 1회" }
+        let value=model.controlValue(spec.id)
         return route.mappedValue(value,spec:spec).map {"예정 "+format($0)} ?? "—"
     }
     private func format(_ value:Double) -> String {String(format:route.transport == .midi ? "%.0f" : "%.2f",value)}
@@ -171,6 +172,7 @@ private struct OutputConnectionCard: View {
         if !model.controlOutputEnabled {return (delivery == nil ? "송신 꺼짐" : "마지막 송신",.secondary)}
         if !route.enabled {return ("비활성",.secondary)}
         guard let delivery else {return ("송신 대기",.secondary)}
+        if route.sendsEvents(spec:spec) && now.timeIntervalSince(delivery.at)>=5 { return ("이벤트 대기",.secondary) }
         return now.timeIntervalSince(delivery.at)<5 ? ("송신 중",orbitAccent) : ("송신 지연",.orange)
     }
 }

@@ -15,10 +15,10 @@ private let orbitPanel = Color(white:0.085)
 private let orbitBrandImage = Bundle.main.url(forResource:"OrbitLogo",withExtension:"png")
     .flatMap { NSImage(contentsOf:$0) }
 private enum OrbitPanel: String, Identifiable {
-    case look, sensors, output, performance, oscMappings
+    case look, sensors, output, performance, oscMappings, events
     var id: String { rawValue }
     var title: String {
-        switch self { case .look:return "공통 조절";case .sensors:return "센서 입력";case .output:return "출력 설정";case .performance:return "FPS · 성능";case .oscMappings:return "OSC 매핑" }
+        switch self { case .look:return "공통 조절";case .sensors:return "센서 입력";case .output:return "출력 설정";case .performance:return "FPS · 성능";case .oscMappings:return "OSC 매핑";case .events:return "영상 이벤트" }
     }
 }
 
@@ -28,8 +28,9 @@ struct ContentView: View {
     @State private var initialSensorID: UUID?
     @State private var showingPalette = false
     @State private var showingMotion = false
+    @State private var motionGroup = 3
     private var paletteParameters: [ShaderParameter] { model.shaderParameters.filter { $0.group == 2 } }
-    private var motionParameters: [ShaderParameter] { model.shaderParameters.filter { $0.group == 3 } }
+    private var motionParameters: [ShaderParameter] { model.shaderParameters.filter { $0.group >= 3 } }
     private var mainParameters: [ShaderParameter] { model.shaderParameters.filter { $0.group < 2 } }
     var body: some View {
         VStack(spacing:0) {
@@ -90,6 +91,8 @@ struct ContentView: View {
         .sheet(item:$panel) { selected in
             if selected == .performance {
                 PerformanceView(model:model,measurement:model.performance) { panel=nil }
+            } else if selected == .events {
+                SceneEventPanel(model:model) { panel=nil }
             } else if selected == .oscMappings {
                 OSCMappingView(model:model) { panel=nil }
             } else {
@@ -175,21 +178,47 @@ struct ContentView: View {
     private var sceneControls: some View {
         VStack(alignment:.leading,spacing:10) {
             HStack(spacing:10) {
-                Text(model.selectedScene?.testScene == true ? "LED TEST" : (model.usesTexture ? "원본 재생 조절" : "\(model.selectedScene?.name ?? "") · 파라미터 \(model.shaderParameters.count)개"))
+                Text(model.selectedScene?.testScene == true ? "LED TEST" : (model.usesTexture ? "원본 재생 조절" : "\(model.selectedScene?.name ?? "") · 연속값 \(model.shaderParameters.count)개"))
                     .font(.system(size:11,weight:.semibold)).accessibilityIdentifier("sceneParameterCount")
                 Spacer()
+                if model.selectedScene?.testScene == false {
+                    Button {panel = .events} label:{Label("이벤트 설정",systemImage:"bolt.fill")}
+                        .accessibilityIdentifier("openSceneEvents")
+                }
                 if !motionParameters.isEmpty {
                     Button { showingMotion = true } label: { Label("움직임",systemImage:"waveform.path") }
                         .accessibilityIdentifier("openPulseMotion")
                         .popover(isPresented:$showingMotion) {
                             VStack(alignment:.leading,spacing:20) {
                                 HStack {
-                                    Text("펄스 움직임").font(.headline)
+                                    Text("펄스 움직임 · 상호작용").font(.headline)
                                     Spacer()
                                     Button { showingMotion = false } label: { Image(systemName:"xmark") }
                                         .accessibilityLabel("움직임 닫기")
                                 }
-                                ForEach(motionParameters) { control in
+                                Picker("움직임 분류",selection:$motionGroup) {
+                                    Text("리듬").tag(3)
+                                    Text("궤도").tag(4)
+                                    Text("상호작용").tag(5)
+                                    Text("출력 신호").tag(6)
+                                }.pickerStyle(.segmented).labelsHidden().accessibilityIdentifier("pulseMotionTabs")
+                                if motionGroup == 6 {
+                                    TimelineView(.periodic(from:.now,by:0.2)) { _ in
+                                        Text("실제 시뮬레이션 → Live / OSC · 교차 \(model.pulseCrossingCount)회")
+                                            .font(.caption).foregroundStyle(.secondary)
+                                    }
+                                    ForEach(model.parameterSpecs.filter(\.outputOnly)) { signal in
+                                        HStack {
+                                            Text(signal.title).font(.system(size:11)).help(signal.detail)
+                                            ParameterRouteButton(model:model,key:signal.id,title:signal.title)
+                                            Spacer()
+                                            TimelineView(.periodic(from:.now,by:0.1)) { _ in
+                                                Text(String(format:"%.3f",model.controlValue(signal.id))).monospacedDigit()
+                                            }
+                                        }.frame(height:38)
+                                    }
+                                }
+                                ForEach(motionParameters.filter { $0.group == motionGroup }) { control in
                                     if control.isSwitch == true {
                                         HStack {
                                             Text(control.title).font(.system(size:11)).help(control.detail)
@@ -206,8 +235,9 @@ struct ContentView: View {
                                         MappedParameterSlider(model:model,key:control.id,title:control.title)
                                     }
                                 }
-                                Text("궤도별 가속 · 감속 · 잔광 · 생성과 소멸\n각 항목을 센서 / Live에 개별 매핑할 수 있습니다.")
+                                Text(motionGroup == 6 ? "교차 발생·위치·강도는 이벤트마다, 근접도는 연속 출력합니다.\n각 연결 버튼에서 목적지와 송신을 설정하세요." : motionGroup == 5 ? "근접 → 연결 → 교차 발광 → 안쪽에서 바깥쪽으로 파동\n각 항목을 센서 / Live에 개별 매핑할 수 있습니다." : "궤도별 가속 · 감속 · 군집 · 생성과 소멸\n각 항목을 센서 / Live에 개별 매핑할 수 있습니다.")
                                     .font(.caption).foregroundStyle(.secondary)
+                                    .lineLimit(nil).fixedSize(horizontal:false,vertical:true)
                             }.padding(20).frame(width:410)
                                 .tint(orbitAccent).buttonStyle(OrbitSecondaryButtonStyle())
                         }
@@ -288,6 +318,10 @@ struct ContentView: View {
                     }
                 }.id(model.selectedSceneID)
             }
+            if model.selectedScene?.testScene == false {
+                Divider()
+                SceneTriggerButtons(model:model)
+            }
         }.padding(.horizontal,20).padding(.vertical,12).background(orbitPanel)
     }
     private var footer: some View {
@@ -322,7 +356,7 @@ private struct OrbitSettingsPanel: View {
                 .padding(20)
             Divider()
             Group {
-                switch panel {case .look:look;case .sensors:sensors;case .output:output;case .performance,.oscMappings:EmptyView()}
+                switch panel {case .look:look;case .sensors:sensors;case .output:output;case .performance,.oscMappings,.events:EmptyView()}
             }.padding(20).frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.topLeading)
             Divider()
             HStack {
@@ -553,7 +587,7 @@ private struct PatternPicker:View {
         }.accessibilityIdentifier("calibrationPattern")
     }
 }
-private struct AcceptFirstClick:ViewModifier {
+struct AcceptFirstClick:ViewModifier {
     @ViewBuilder func body(content:Content)->some View {
         if #available(macOS 15.0,*) {content.allowsWindowActivationEvents(true)} else {content}
     }
