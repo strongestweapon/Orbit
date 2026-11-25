@@ -1,6 +1,5 @@
 import Foundation
 import Network
-import CoreMIDI
 
 struct ControlEmission {
     let id: String
@@ -14,36 +13,20 @@ struct ControlDelivery {
     let value: Double
     let at: Date
     let error: String?
+    var signal: String = ""
 }
 
-/// A virtual MIDI input visible to Live, plus independently addressed OSC/UDP destinations.
+/// OSC float output. Each event remains a distinct UDP bundle.
 final class ControlOutput {
     var onStatus: ((String) -> Void)?
     /// Local transport completion, not acknowledgement from Live or an OSC receiver.
     var onDelivery: ((ControlDelivery) -> Void)?
     private let queue = DispatchQueue(label:"studio.superless.orbit.control-output")
-    private var client = MIDIClientRef()
-    private var source = MIDIEndpointRef()
     private var connections: [String:NWConnection] = [:]
     private var retryAfter: [String:TimeInterval] = [:]
     private var sent: [String:(destination:String,value:Double,time:TimeInterval)] = [:]
     private var epoch = 0
     private var status = ""
-    let portName: String
-    init(portName: String = "Orbit Control") { self.portName = portName }
-
-    func prepare() { queue.async { [weak self] in _ = self?.prepareMIDI() } }
-    private func prepareMIDI() -> Bool {
-        if source != 0 { return true }
-        if client == 0 {
-            let result = MIDIClientCreateWithBlock("Orbit" as CFString,&client,nil)
-            guard result == noErr else { report("MIDI 초기화 실패 · \(result)"); return false }
-        }
-        let result = MIDISourceCreateWithProtocol(client,portName as CFString,._1_0,&source)
-        guard result == noErr else { report("MIDI 포트 생성 실패 · \(result)"); return false }
-        report("MIDI 준비 · \(portName)"); return true
-    }
-
     func reset() {
         queue.async { [weak self] in
             guard let self else { return }
@@ -65,20 +48,10 @@ final class ControlOutput {
             }
             for emission in emissions where emission.route.validationError == nil && emission.value.isFinite {
                 let route = emission.route
-                let value = route.transport == .midi ? min(127,max(0,emission.value.rounded())) : emission.value
+                let value = emission.value
                 if !force, let prior = self.sent[emission.id], prior.destination == route.destinationKey,
-                   abs(prior.value-value) < (route.transport == .midi ? 0.5 : 0.0001), now-prior.time < 2 { continue }
-                if route.transport == .midi {
-                    if self.sendMIDI(channel:route.channel,controller:route.controller,value:Int(value)) {
-                        self.sent[emission.id] = (route.destinationKey,value,now)
-                        self.report(force ? "MIDI 테스트 송신 · CH \(route.channel) CC \(route.controller)" : "MIDI 송신 · \(self.portName)")
-                        self.delivered(emission,value:value)
-                    } else {
-                        self.delivered(emission,value:value,error:"MIDI 송신 실패")
-                    }
-                } else {
-                    self.sendOSC(emission,value:value,now:now,force:force)
-                }
+                   abs(prior.value-value) < 0.0001, now-prior.time < 2 { continue }
+                self.sendOSC(emission,value:value,now:now,force:force)
             }
         }
     }
@@ -88,12 +61,6 @@ final class ControlOutput {
         queue.async { [weak self] in
             guard let self else { return }
             let valid = emissions.filter { $0.route.validationError == nil && $0.value.isFinite }
-            for emission in valid where emission.route.transport == .midi {
-                let value = min(127,max(0,emission.value.rounded()))
-                if self.sendMIDI(channel:emission.route.channel,controller:emission.route.controller,value:Int(value)) {
-                    self.delivered(emission,value:value); self.report(test ? "MIDI 이벤트 테스트 송신" : "MIDI 이벤트 송신 · \(self.portName)")
-                } else { self.delivered(emission,value:value,error:"MIDI 이벤트 송신 실패") }
-            }
             let groups = Dictionary(grouping:valid.filter { $0.route.transport == .osc }) { "\($0.route.host):\($0.route.port)" }
             for group in groups.values {
                 let messages = group.compactMap { OSCEncoder.floatMessage(address:$0.route.address,value:Float($0.value)) }
@@ -101,18 +68,6 @@ final class ControlOutput {
                 self.sendOSCPacket(group,data:OSCEncoder.immediateBundle(messages),now:ProcessInfo.processInfo.systemUptime,label:test ? "OSC 이벤트 테스트 송신" : "OSC 이벤트 송신")
             }
         }
-    }
-    private func sendMIDI(channel: Int, controller: Int, value: Int) -> Bool {
-        guard prepareMIDI() else { return false }
-        var events = MIDIEventList()
-        let result: OSStatus = withUnsafeMutablePointer(to:&events) { list in
-            let packet = MIDIEventListInit(list,._1_0)
-            var word = UInt32(0x20B00000) | (UInt32(channel-1)<<16) | (UInt32(controller)<<8) | UInt32(value)
-            _ = MIDIEventListAdd(list,MemoryLayout<MIDIEventList>.size,packet,0,1,&word)
-            return MIDIReceivedEventList(source,list)
-        }
-        if result != noErr { report("MIDI 송신 실패 · \(result)") }
-        return result == noErr
     }
     private func sendOSC(_ emission: ControlEmission, value: Double, now: TimeInterval, force: Bool) {
         guard let data = OSCEncoder.floatMessage(address:emission.route.address,value:Float(value)) else { return }
@@ -148,14 +103,13 @@ final class ControlOutput {
         })
     }
     private func delivered(_ emission: ControlEmission, value: Double, error: String? = nil) {
-        onDelivery?(ControlDelivery(id:emission.id,destination:emission.route.destinationKey,value:value,at:Date(),error:error))
+        onDelivery?(ControlDelivery(id:emission.id,destination:emission.route.destinationKey,value:value,at:Date(),error:error,
+                                   signal:emission.route.address))
     }
     private func report(_ text: String) {
         guard status != text else { return }; status = text; onStatus?(text)
     }
     deinit {
         connections.values.forEach { $0.cancel() }
-        if source != 0 { MIDIEndpointDispose(source) }
-        if client != 0 { MIDIClientDispose(client) }
     }
 }

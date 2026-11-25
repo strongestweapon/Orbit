@@ -46,29 +46,29 @@ import Foundation
         precondition(decoded.parameterRoutes?["speed"]?.output.controller == 45)
         precondition(decoded.textureParameterRoutes?["brightness"]?.input.maximum == 0.8)
 
-        let midi = ParameterOutputRoute()
+        let defaults = ParameterOutputRoute()
         let oldOutput = """
         {"enabled":true,"transport":"midi","channel":2,"controller":74,"host":"127.0.0.1","port":9001,"address":"/orbit/value","minimum":0,"maximum":127}
         """
         var existingOutput = try JSONDecoder().decode(ParameterOutputRoute.self,from:Data(oldOutput.utf8))
         precondition(existingOutput.targetName == nil && existingOutput.configured == nil)
-        precondition(existingOutput.isListed(defaultRoute:midi))
+        precondition(existingOutput.isListed(defaultRoute:defaults))
         existingOutput.enabled=false
-        precondition(existingOutput.isListed(defaultRoute:midi),"Disabled custom endpoints must remain visible")
-        var draftOutput=midi;draftOutput.configured=true;draftOutput.targetName="Live · Filter Cutoff"
+        precondition(existingOutput.isListed(defaultRoute:defaults),"Disabled custom endpoints must remain visible")
+        var draftOutput=defaults;draftOutput.configured=true;draftOutput.targetName="Live · Filter Cutoff"
         let reloadedOutput=try JSONDecoder().decode(ParameterOutputRoute.self,from:JSONEncoder().encode(draftOutput))
-        precondition(reloadedOutput.isListed(defaultRoute:midi) && reloadedOutput.displayName=="Live · Filter Cutoff")
-        precondition(!midi.isListed(defaultRoute:midi),"Input-only default route is not an output connection")
+        precondition(reloadedOutput.isListed(defaultRoute:defaults) && reloadedOutput.displayName==reloadedOutput.address)
+        precondition(!defaults.isListed(defaultRoute:defaults),"Input-only default route is not an output connection")
         var statusSensor=first;statusSensor.value=25;statusSensor.receivedAt=now
         precondition(statusSensor.receptionState(running:false,now:now) == .stopped)
         precondition(statusSensor.receptionState(running:true,now:now) == .receiving)
         precondition(statusSensor.receptionState(running:true,now:now.addingTimeInterval(90)) == .stale)
         statusSensor.receivedAt=nil
         precondition(statusSensor.receptionState(running:true,now:now) == .waiting,"Saved values must not look live")
-        close(midi.mappedValue(1.5,spec:.find("speed"))!,64)
-        close(midi.mappedValue(-0.5,spec:.find("hueShift"))!,0)
-        close(midi.mappedValue(0.5,spec:.find("hueShift"))!,127)
-        var osc = midi;osc.transport = .osc;osc.minimum = -20;osc.maximum = 20
+        close(defaults.mappedValue(1.5,spec:.find("speed"))!,0.5)
+        close(defaults.mappedValue(-0.5,spec:.find("hueShift"))!,0)
+        close(defaults.mappedValue(0.5,spec:.find("hueShift"))!,1)
+        var osc = defaults;osc.transport = .osc;osc.minimum = -20;osc.maximum = 20
         close(osc.mappedValue(0.75,spec:.find("brightness"))!,10)
         osc.port = 70000;precondition(osc.validationError != nil)
         osc.port = 9001;osc.address = "bad";precondition(osc.validationError != nil)
@@ -77,6 +77,22 @@ import Foundation
         precondition(OSCEncoder.floatMessage(address:"/x",value:.nan) == nil)
         // Old persisted routes retain continuous semantics; new event state never leaks into JSON.
         precondition(existingOutput.behavior == .continuous)
+        precondition(existingOutput.validationError != nil, "Unconverted legacy MIDI must never transmit")
+        let converted=existingOutput.oscOnly()
+        precondition(converted.transport == .osc && converted.address==existingOutput.address)
+        close(converted.minimum,0);close(converted.maximum,1)
+        precondition(converted.oscOnly()==converted,"Migration must be idempotent")
+        var reversed=existingOutput;reversed.minimum=127;reversed.maximum=32
+        close(reversed.oscOnly().minimum,1);close(reversed.oscOnly().maximum,32.0/127.0)
+        precondition(osc.oscOnly()==osc,"Custom OSC ranges must be preserved")
+        scene.parameterRoutes?["speed"]?.output=existingOutput
+        scene.textureParameterRoutes?["brightness"]?.output=reversed
+        scene.migrateOSCOutputs()
+        precondition(scene.parameterRoutes?["speed"]?.output==converted)
+        precondition(scene.textureParameterRoutes?["brightness"]?.output==reversed.oscOnly())
+        let migrated=try JSONDecoder().decode(SceneSettings.self,from:JSONEncoder().encode(scene))
+        precondition(migrated.parameterRoutes?["speed"]?.output.transport == .osc)
+
         var cue=ParameterInputRoute(enabled:true,sensorID:first.id,minimum:0.2,maximum:0.9,smoothingSeconds:8)
         cue.mode = .event;cue.event = .init(threshold:.init(),attack:0.1,hold:0.1,release:0.2)
         var events=ParameterEvents()
@@ -129,7 +145,7 @@ import Foundation
         separated.separateTriggerRoutes(scene:"sample",specs:[.find("brightness")],textured:false)
         precondition(once==separated.parameterRoutes)
         precondition(ParameterSpec.find("trigger.discharge").isTrigger && !ParameterSpec.find("brightness").isTrigger)
-        print("PASS: simultaneous routes, smoothing, stale/deleted inputs, legacy migration, connection list persistence, sensor states, MIDI scaling, OSC wire bytes")
+        print("PASS: simultaneous routes, smoothing, stale/deleted inputs, legacy migration, connection list persistence, sensor states, legacy MIDI to OSC conversion, OSC float scaling and wire bytes")
     }
     static func close(_ a:Double,_ b:Double) {precondition(abs(a-b)<0.000001,"\(a) != \(b)")}
 }

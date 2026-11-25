@@ -82,4 +82,12 @@ struct OSCReceipt {
     var value: Double
     var receivedAt: Date
     var triggerCount: Int = 0
+    var packetCount: Int = 0
+
+    /// A short hold followed by a fade. Repeated identical packets renew it.
+    func activityLevel(at date: Date) -> Double {
+        let age=date.timeIntervalSince(receivedAt)
+        guard age >= 0, age < 1 else {return 0}
+        return age < 0.25 ? 1 : (1-age)/0.75
+    }
 }

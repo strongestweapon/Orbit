@@ -15,23 +15,37 @@ private let orbitPanel = Color(white:0.085)
 private let orbitBrandImage = Bundle.main.url(forResource:"OrbitLogo",withExtension:"png")
     .flatMap { NSImage(contentsOf:$0) }
 private enum OrbitPanel: String, Identifiable {
-    case look, sensors, output, performance, oscMappings, events
+    case look, output, performance, oscMappings
     var id: String { rawValue }
     var title: String {
-        switch self { case .look:return "공통 조절";case .sensors:return "센서 입력";case .output:return "출력 설정";case .performance:return "FPS · 성능";case .oscMappings:return "OSC 매핑";case .events:return "영상 이벤트" }
+        switch self { case .look:return "공통 조절";case .output:return "출력 설정";case .performance:return "FPS · 성능";case .oscMappings:return "OSC 매핑" }
+    }
+}
+
+private enum SceneControlSection: Int, CaseIterable, Identifiable {
+    case basic = 0, rhythm = 3, orbit = 4, interaction = 5, color = 2, output = 6
+    var id: Int { rawValue }
+    var title: String {
+        switch self {
+        case .basic:return "기본 움직임"
+        case .rhythm:return "리듬"
+        case .orbit:return "궤도"
+        case .interaction:return "상호작용"
+        case .color:return "색상"
+        case .output:return "출력 신호"
+        }
     }
 }
 
 struct ContentView: View {
     @ObservedObject var model: OrbitModel
     @State private var panel: OrbitPanel?
-    @State private var initialSensorID: UUID?
-    @State private var showingPalette = false
-    @State private var showingMotion = false
-    @State private var motionGroup = 3
-    private var paletteParameters: [ShaderParameter] { model.shaderParameters.filter { $0.group == 2 } }
-    private var motionParameters: [ShaderParameter] { model.shaderParameters.filter { $0.group >= 3 } }
+    @State private var controlSection: SceneControlSection = .basic
+    private var groupedControls: Bool { model.shaderParameters.contains { $0.group >= 2 } }
     private var mainParameters: [ShaderParameter] { model.shaderParameters.filter { $0.group < 2 } }
+    private var sectionParameters: [ShaderParameter] {
+        controlSection == .basic ? mainParameters : model.shaderParameters.filter { $0.group == controlSection.rawValue }
+    }
     var body: some View {
         VStack(spacing:0) {
             transport
@@ -81,22 +95,20 @@ struct ContentView: View {
             Divider()
             sceneControls
             Divider()
-            ConnectionStrip(model:model) { sensorID in
-                initialSensorID=sensorID;panel = .sensors
-            }
             footer
         }
+        .onChange(of:model.selectedSceneID) { _ in controlSection = .basic }
+        .onChange(of:model.usesTexture) { _ in controlSection = .basic }
         .background(Color(white:0.045)).tint(orbitAccent).accentColor(orbitAccent)
         .buttonStyle(OrbitSecondaryButtonStyle())
         .sheet(item:$panel) { selected in
             if selected == .performance {
                 PerformanceView(model:model,measurement:model.performance) { panel=nil }
-            } else if selected == .events {
-                SceneEventPanel(model:model) { panel=nil }
+
             } else if selected == .oscMappings {
                 OSCMappingView(model:model) { panel=nil }
             } else {
-                OrbitSettingsPanel(model:model,panel:selected,initialSensorID:$initialSensorID) { panel=nil }
+                OrbitSettingsPanel(model:model,panel:selected) { panel=nil }
             }
         }
         .alert("Orbit",isPresented:Binding(get:{model.errorMessage != nil},set:{if !$0 {model.errorMessage=nil}})) {
@@ -124,8 +136,6 @@ struct ContentView: View {
             Spacer()
             Button {panel = .oscMappings} label:{Label("OSC 매핑",systemImage:"point.3.connected.trianglepath.dotted")}
                 .accessibilityIdentifier("openOSCMapping")
-            Circle().fill(model.outputActive ? .red : .gray).frame(width:7,height:7)
-            Text(model.outputStatus).font(.system(size:10)).lineLimit(1)
             Button {panel = .output} label:{Label("출력 설정",systemImage:"display")}.accessibilityIdentifier("openOutput")
             if model.outputOpen {
                 Button {model.toggleOutputFullscreen()} label:{Image(systemName:model.outputFullscreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")}
@@ -182,112 +192,10 @@ struct ContentView: View {
                     .font(.system(size:11,weight:.semibold)).accessibilityIdentifier("sceneParameterCount")
                 Spacer()
                 if model.selectedScene?.testScene == false {
-                    Button {panel = .events} label:{Label("이벤트 설정",systemImage:"bolt.fill")}
-                        .accessibilityIdentifier("openSceneEvents")
-                }
-                if !motionParameters.isEmpty {
-                    Button { showingMotion = true } label: { Label("움직임",systemImage:"waveform.path") }
-                        .accessibilityIdentifier("openPulseMotion")
-                        .popover(isPresented:$showingMotion) {
-                            VStack(alignment:.leading,spacing:20) {
-                                HStack {
-                                    Text("펄스 움직임 · 상호작용").font(.headline)
-                                    Spacer()
-                                    Button { showingMotion = false } label: { Image(systemName:"xmark") }
-                                        .accessibilityLabel("움직임 닫기")
-                                }
-                                Picker("움직임 분류",selection:$motionGroup) {
-                                    Text("리듬").tag(3)
-                                    Text("궤도").tag(4)
-                                    Text("상호작용").tag(5)
-                                    Text("출력 신호").tag(6)
-                                }.pickerStyle(.segmented).labelsHidden().accessibilityIdentifier("pulseMotionTabs")
-                                if motionGroup == 6 {
-                                    TimelineView(.periodic(from:.now,by:0.2)) { _ in
-                                        Text("실제 시뮬레이션 → Live / OSC · 교차 \(model.pulseCrossingCount)회")
-                                            .font(.caption).foregroundStyle(.secondary)
-                                    }
-                                    ForEach(model.parameterSpecs.filter(\.outputOnly)) { signal in
-                                        HStack {
-                                            Text(signal.title).font(.system(size:11)).help(signal.detail)
-                                            ParameterRouteButton(model:model,key:signal.id,title:signal.title)
-                                            Spacer()
-                                            TimelineView(.periodic(from:.now,by:0.1)) { _ in
-                                                Text(String(format:"%.3f",model.controlValue(signal.id))).monospacedDigit()
-                                            }
-                                        }.frame(height:38)
-                                    }
-                                }
-                                ForEach(motionParameters.filter { $0.group == motionGroup }) { control in
-                                    if control.isSwitch == true {
-                                        HStack {
-                                            Text(control.title).font(.system(size:11)).help(control.detail)
-                                            ParameterRouteButton(model:model,key:control.id,title:control.title)
-                                            Spacer()
-                                            Toggle(control.title,isOn:Binding(
-                                                get:{model.value(control.id)>=0.5},
-                                                set:{model.setNormalizedParameterValue(control.id,$0 ? 1:0)}))
-                                                .labelsHidden().toggleStyle(.switch)
-                                                .disabled(model.route(for:control.id).input.enabled)
-                                                .accessibilityIdentifier("parameter_"+control.id)
-                                        }.frame(height:38)
-                                    } else {
-                                        MappedParameterSlider(model:model,key:control.id,title:control.title)
-                                    }
-                                }
-                                Text(motionGroup == 6 ? "교차 발생·위치·강도는 이벤트마다, 근접도는 연속 출력합니다.\n각 연결 버튼에서 목적지와 송신을 설정하세요." : motionGroup == 5 ? "근접 → 연결 → 교차 발광 → 안쪽에서 바깥쪽으로 파동\n각 항목을 센서 / Live에 개별 매핑할 수 있습니다." : "궤도별 가속 · 감속 · 군집 · 생성과 소멸\n각 항목을 센서 / Live에 개별 매핑할 수 있습니다.")
-                                    .font(.caption).foregroundStyle(.secondary)
-                                    .lineLimit(nil).fixedSize(horizontal:false,vertical:true)
-                            }.padding(20).frame(width:410)
-                                .tint(orbitAccent).buttonStyle(OrbitSecondaryButtonStyle())
-                        }
-                }
-                if !paletteParameters.isEmpty {
-                    Button { showingPalette = true } label: {
-                        HStack(spacing:6) {
-                            HStack(spacing:3) {
-                                ForEach(paletteParameters) { control in
-                                    Circle().fill(model.value(control.id) >= 0.5 ? Color.white : Color(.sRGB,red:1,green:0,blue:0,opacity:1)).frame(width:8,height:8)
-                                }
-                            }.accessibilityHidden(true)
-                            Text("궤도 색")
-                        }
-                    }.accessibilityIdentifier("openPulsePalette")
-                        .popover(isPresented:$showingPalette) {
-                            VStack(alignment:.leading,spacing:18) {
-                                HStack {
-                                    Text("궤도별 펄스 색").font(.headline)
-                                    Spacer()
-                                    Button { showingPalette = false } label: { Image(systemName:"xmark") }
-                                        .accessibilityLabel("궤도 색 닫기")
-                                }
-                                ForEach(paletteParameters) { control in
-                                    HStack(spacing:12) {
-                                        Circle().fill(model.value(control.id) >= 0.5 ? Color.white : Color(.sRGB,red:1,green:0,blue:0,opacity:1))
-                                            .frame(width:18,height:18).accessibilityHidden(true)
-                                        Text(control.title).font(.system(size:11)).help(control.detail)
-                                        ParameterRouteButton(model:model,key:control.id,title:control.title)
-                                        Spacer()
-                                        Picker(control.title,selection:Binding(
-                                            get:{ model.value(control.id) >= 0.5 ? 1 : 0 },
-                                            set:{ model.setNormalizedParameterValue(control.id,Double($0)) })) {
-                                                Text("레드").tag(0); Text("화이트").tag(1)
-                                            }.labelsHidden().pickerStyle(.segmented).frame(width:160)
-                                                .disabled(model.route(for:control.id).input.enabled)
-                                                .accessibilityIdentifier("parameter_"+control.id)
-                                    }
-                                }
-                                Text("0.5 미만 레드 · 0.5 이상 화이트 · 센서 / Live 매핑 가능")
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }.padding(20).frame(width:410)
-                                .tint(orbitAccent).buttonStyle(OrbitSecondaryButtonStyle())
-                        }
-                }
-                if model.selectedScene?.testScene == false {
                     Button {model.resetSceneAppearance()} label:{Label("초기값 복원",systemImage:"arrow.counterclockwise")}
                         .accessibilityIdentifier("resetSceneAppearance")
                         .accessibilityLabel("\(model.selectedScene?.name ?? "") 초기값 복원")
-                        .help("현재 씬의 조절값과 재생 속도를 초기값으로 복원합니다. 센서·출력 매핑과 링 방향은 유지되며, 활성 센서 입력은 계속 적용됩니다.")
+                        .help("현재 씬의 조절값과 재생 속도를 초기값으로 복원합니다. OSC 매핑과 링 방향은 유지됩니다.")
                 }
                 Button {panel = .look} label:{Label(model.usesTexture ? "원본 조절" : "공통 조절",systemImage:"slider.horizontal.3")}
                     .disabled(model.selectedScene?.testScene == true).accessibilityIdentifier("openLook")
@@ -311,6 +219,8 @@ struct ContentView: View {
                     MappedParameterSlider(model:model,key:"brightness",title:"밝기")
                     MappedParameterSlider(model:model,key:"energy",title:"발광")
                 }
+            } else if groupedControls {
+                groupedParameterControls
             } else {
                 LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:24),count:min(4,max(1,mainParameters.count))),spacing:12) {
                     ForEach(mainParameters) { control in
@@ -324,15 +234,133 @@ struct ContentView: View {
             }
         }.padding(.horizontal,20).padding(.vertical,12).background(orbitPanel)
     }
+    // Section navigation stays visible; the shared pane keeps the preview and
+    // trigger buttons stationary while using full-size labels and sliders.
+    private var groupedParameterControls: some View {
+        VStack(spacing:12) {
+            HStack(spacing:6) {
+                ForEach(SceneControlSection.allCases) { section in
+                    TimelineView(.periodic(from:.now,by:0.05)) { context in
+                        let keys=(section == .basic ? mainParameters : model.shaderParameters.filter {$0.group == section.rawValue}).map(\.id)
+                        let receipt=model.latestOSCInput(for:keys)
+                        Button { controlSection=section } label: {
+                            HStack(spacing:6) {
+                                Text(section.title).font(.system(size:13,weight:.medium))
+                                if section != .output {
+                                    OSCReceiveLight(receipt:receipt,date:context.date,title:section.title)
+                                        .accessibilityHidden(true)
+                                }
+                            }.frame(maxWidth:.infinity).frame(height:30)
+                                .foregroundStyle(controlSection == section ? Color.white : Color.white.opacity(0.8))
+                                .background(controlSection == section ? orbitAccent : Color.white.opacity(0.045),in:RoundedRectangle(cornerRadius:6))
+                                .contentShape(Rectangle())
+                        }.buttonStyle(.plain).modifier(AcceptFirstClick())
+                            .accessibilityLabel(section.title)
+                            .accessibilityValue((receipt?.activityLevel(at:context.date) ?? 0) > 0 ? "OSC 수신 중" : "")
+                            .accessibilityIdentifier("sceneSection_\(section.rawValue)")
+                            .accessibilityAddTraits(controlSection == section ? .isSelected : [])
+                    }
+                }
+            }
+            Group {
+                if controlSection == .output {
+                    HStack(spacing:12) {
+                        ForEach(model.parameterSpecs.filter(\.outputOnly)) { signal in
+                            VStack(alignment:.leading,spacing:7) {
+                                HStack(spacing:5) {
+                                    Text(signal.title).font(.system(size:13,weight:.medium)).help(signal.detail)
+                                    ParameterRouteButton(model:model,key:signal.id,title:signal.title)
+                                    Spacer(minLength:0)
+                                }
+                                TimelineView(.periodic(from:.now,by:0.1)) { _ in
+                                    Text(String(format:"%.3f",model.controlValue(signal.id)))
+                                        .font(.system(size:20,design:.monospaced)).monospacedDigit()
+                                }.accessibilityIdentifier("signalValue_"+signal.id)
+                                Text(model.route(for:signal.id).output.sendsTriggerValue(spec:signal)
+                                     ? (signal.eventOutput ? "트리거 · 교차마다 1회" : "트리거 · 값 변경마다 1회")
+                                     : (signal.eventOutput ? "연속값 · 교차마다" : "연속값 · 0.0–1.0"))
+                                    .font(.system(size:12)).foregroundStyle(.secondary)
+                            }.padding(10).frame(maxWidth:.infinity,alignment:.leading)
+                                .background(Color.white.opacity(0.025),in:RoundedRectangle(cornerRadius:6))
+                        }
+                    }
+                } else {
+                    LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:24),count:min(4,max(1,sectionParameters.count))),spacing:14) {
+                        ForEach(sectionParameters) { control in sceneParameterControl(control) }
+                    }
+                }
+            }.id("\(model.selectedSceneID):\(controlSection.rawValue)")
+                .frame(height:106,alignment:.top)
+                .accessibilityElement(children:.contain).accessibilityLabel(controlSection.title)
+        }
+    }
+    @ViewBuilder
+    private func sceneParameterControl(_ control: ShaderParameter) -> some View {
+        if control.group == 2 {
+            VStack(alignment:.leading,spacing:6) {
+                HStack(spacing:5) {
+                    Circle().fill(model.value(control.id) >= 0.5 ? Color.white : Color(.sRGB,red:1,green:0,blue:0,opacity:1))
+                        .frame(width:10,height:10).accessibilityHidden(true)
+                    Text(control.title).font(.system(size:13)).help(control.detail)
+                    ParameterRouteButton(model:model,key:control.id,title:control.title)
+                }
+                Picker(control.title,selection:Binding(
+                    get:{model.value(control.id) >= 0.5 ? 1 : 0},
+                    set:{model.setNormalizedParameterValue(control.id,Double($0))})) {
+                        Text("레드").tag(0);Text("화이트").tag(1)
+                    }.labelsHidden().pickerStyle(.segmented).controlSize(.regular)
+                        .disabled(model.route(for:control.id).input.enabled)
+                        .accessibilityIdentifier("parameter_"+control.id)
+            }.frame(height:46)
+        } else if control.isSwitch == true {
+            VStack(alignment:.leading,spacing:6) {
+                HStack(spacing:5) {
+                    Text(control.title).font(.system(size:13)).help(control.detail)
+                    ParameterRouteButton(model:model,key:control.id,title:control.title)
+                    Spacer(minLength:0)
+                }
+                HStack {
+                    Text(model.value(control.id) >= 0.5 ? "켜짐" : "꺼짐")
+                        .font(.system(size:13)).foregroundStyle(.secondary)
+                    Spacer()
+                    Toggle(control.title,isOn:Binding(
+                        get:{model.value(control.id) >= 0.5},
+                        set:{model.setNormalizedParameterValue(control.id,$0 ? 1:0)}))
+                        .labelsHidden().toggleStyle(.switch).controlSize(.small)
+                        .disabled(model.route(for:control.id).input.enabled)
+                        .accessibilityIdentifier("parameter_"+control.id)
+                }
+            }.frame(height:46)
+        } else {
+            MappedParameterSlider(model:model,key:control.id,title:control.title,fontSize:13,controlHeight:46)
+        }
+    }
     private var footer: some View {
-        HStack {
-            Text(model.usesTexture ? "추출 원본 재생" : "실시간 코드 생성 · 이미지/영상 텍스처 없음")
-            Spacer()
-            Text(model.controlOutputEnabled ? model.controlOutputStatus : model.lastMessage).lineLimit(1)
+        HStack(spacing:12) {
+            videoOutputStatus
+            Divider().frame(height:12)
+            OSCStatusStrip(model:model)
+                .frame(maxWidth:.infinity,alignment:.leading)
             Text("v"+(Bundle.main.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String ?? ""))
             OrbitUpdateMenu()
             Text("Metal · "+model.frameRate.label).frame(width:105,alignment:.trailing)
-        }.font(.system(size:9,design:.monospaced)).foregroundStyle(.secondary).padding(.horizontal,20).frame(height:23).background(orbitPanel)
+        }.font(.system(size:9,design:.monospaced)).foregroundStyle(.secondary).padding(.horizontal,20).frame(height:32).background(orbitPanel)
+    }
+    private var videoOutputStatus: some View {
+        let state = model.outputActive ? "영상 출력 중" : model.outputOpen ? "출력 프레임 대기" : "영상 출력 꺼짐"
+        let mode = model.outputFullscreen ? "전체화면" : "창 모드"
+        return HStack(spacing:5) {
+            Circle().fill(model.outputActive ? .red : model.outputOpen ? .orange : .gray).frame(width:6,height:6)
+            Text(state).foregroundStyle(.white).fixedSize()
+            if model.outputOpen {
+                Text(model.outputName).lineLimit(1).truncationMode(.middle).frame(maxWidth:150)
+                Text("· "+mode).fixedSize()
+            }
+        }.font(.system(size:10,design:.monospaced))
+            .accessibilityElement(children:.ignore)
+            .accessibilityLabel(state+(model.outputOpen ? " · \(model.outputName) · \(mode)" : ""))
+            .accessibilityIdentifier("videoOutputStatus")
+            .help(model.outputOpen ? "\(model.outputStatus) · \(mode) · \(model.outputSizeLabel)" : "영상 출력이 꺼져 있습니다.")
     }
     private func binding(_ key:String)->Binding<Double> {
         Binding(get:{Double(model.value(key))},set:{model.setValue(key,Float($0))})
@@ -345,30 +373,22 @@ struct ContentView: View {
 private struct OrbitSettingsPanel: View {
     @ObservedObject var model:OrbitModel
     let panel:OrbitPanel
-    @Binding var initialSensorID: UUID?
     let close:()->Void
     @State private var tab=0
-    @State private var selectedSensor:UUID?
-    @State private var sensorPage=0
     var body:some View {
         VStack(spacing:0) {
-            HStack {Text(panel.title).font(.system(size:19,weight:.semibold));Spacer();Text(model.selectedScene?.name ?? "").foregroundStyle(.secondary);Button {close()} label:{Image(systemName:"xmark")}.keyboardShortcut(.cancelAction)}
+            HStack {Text(panel.title).font(.system(size:19,weight:.semibold));Spacer();Text(model.selectedScene?.name ?? "").foregroundStyle(.secondary)}
                 .padding(20)
             Divider()
             Group {
-                switch panel {case .look:look;case .sensors:sensors;case .output:output;case .performance,.oscMappings,.events:EmptyView()}
+                switch panel {case .look:look;case .output:output;case .performance,.oscMappings:EmptyView()}
             }.padding(20).frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.topLeading)
             Divider()
             HStack {
-                if panel == .look {Button("연출 기본값 복원"){model.resetSceneAppearance()}}
-                Spacer();Button("닫기",action:close).keyboardShortcut(.defaultAction)
+                Spacer();Button("닫기",action:close).keyboardShortcut(.cancelAction)
             }.padding(16)
         }.frame(width:640,height:520).background(Color(white:0.07)).tint(orbitAccent).accentColor(orbitAccent)
             .buttonStyle(OrbitSecondaryButtonStyle())
-            .onAppear {
-                selectedSensor=initialSensorID ?? model.sensors.first?.id
-                sensorPage=(model.sensors.firstIndex {$0.id==selectedSensor} ?? 0)/6
-            }
     }
     private var look:some View {
         Group {
@@ -408,14 +428,12 @@ private struct OrbitSettingsPanel: View {
             Picker("연출 설정",selection:$tab) {Text("밀도 · 색").tag(0);Text("움직임").tag(1);Text("빛 · 소멸").tag(2)}.pickerStyle(.segmented)
             if tab==0 {
                 parameter(model.usesTexture ? "질감 대비" : "밀도","density")
-                parameter(model.usesTexture ? "발광" : "에너지","energy")
                 parameter("색상 이동","hueShift")
                 Text(model.usesTexture ? "추출한 원본을 재생합니다." : "빛의 형태·색·질감·시간 변화를 셰이더 코드로 생성합니다.").font(.system(size:10)).foregroundStyle(.secondary)
             } else if tab==1 {
-                MappedParameterSlider(model:model,key:"speed",title:"전체 속도")
                 parameter(model.usesTexture ? "부분 흐름 변형" : "움직임","turbulence")
                 if model.usesTexture && model.selectedScene?.texture?.kind=="image" {parameter("전체 회전","rotation")}
-                Text(model.usesTexture ? "재생 속도 0은 정지, 1은 최대입니다. 원본 속도는 약 0.33입니다." : "속도는 시간 진행을, 움직임은 씬 내부의 변화를 조절합니다.").font(.system(size:10)).foregroundStyle(.secondary)
+                Text("부분 흐름과 회전을 조절합니다. 재생 속도·발광은 메인 화면에서 조절합니다.").font(.system(size:10)).foregroundStyle(.secondary)
             } else {
                 parameter("빛이 남는 범위","coverage")
                 parameter("소멸 경계 부드러움","gapSoftness")
@@ -424,50 +442,6 @@ private struct OrbitSettingsPanel: View {
                 Text("범위 0은 전체 소등, 1은 전체 범위입니다.").font(.system(size:10)).foregroundStyle(.secondary)
             }
         }
-    }
-    private var sensors:some View {
-        VStack(alignment:.leading,spacing:15) {
-            HStack {
-                Text("OSC · UDP").font(.system(size:11,weight:.semibold))
-                TextField("포트",text:$model.port).frame(width:70).disabled(model.oscRunning)
-                Button(model.oscRunning ? "수신 중지" : "수신 시작"){if model.oscRunning {model.stopOSC()} else {model.startOSC()}}
-                Spacer();Button {model.addSensor();selectedSensor=model.sensors.last?.id;sensorPage=max(0,(model.sensors.count-1)/6)} label:{Label("입력 추가",systemImage:"plus")}
-            }
-            HStack(alignment:.top,spacing:22) {
-                VStack(spacing:5) {
-                    ForEach(Array(model.sensors.dropFirst(sensorPage*6).prefix(6))) {sensor in
-                        Button {selectedSensor=sensor.id} label:{
-                            HStack {SensorDot(sensor:sensor,running:model.oscRunning);Text(sensor.name).lineLimit(1);Spacer()}.padding(9).frame(height:35)
-                                .background(selectedSensor==sensor.id ? Color.white.opacity(0.11) : .clear,in:RoundedRectangle(cornerRadius:5))
-                        }.buttonStyle(.plain)
-                    }
-                    Spacer(minLength:0)
-                    HStack {
-                        Button {sensorPage=max(0,sensorPage-1)} label:{Image(systemName:"chevron.left")}.disabled(sensorPage==0)
-                        Text("\(sensorPage+1) / \(max(1,(model.sensors.count+5)/6))").font(.system(size:10)).monospacedDigit()
-                        Button {sensorPage+=1} label:{Image(systemName:"chevron.right")}.disabled((sensorPage+1)*6>=model.sensors.count)
-                    }
-                }.frame(width:180,height:275)
-                Divider().frame(height:275)
-                if let sensor=sensorBinding {
-                    VStack(alignment:.leading,spacing:12) {
-                        labeled("이름") {TextField("센서 이름",text:sensor.name)}
-                        labeled("OSC 주소") {TextField("/park/sensor",text:sensor.address).font(.system(size:11,design:.monospaced))}
-                        Text("OSC Float · 0.0–1.0").foregroundStyle(.secondary)
-                        Stepper("OSC 인수 \(sensor.wrappedValue.argument)",value:sensor.argument,in:0...15)
-                        HStack {Text("마지막 수신 값").foregroundStyle(.secondary);Spacer();Text(sensor.wrappedValue.value.map{String(format:"%.2f",$0)} ?? "대기 중").monospacedDigit()}
-                        Button("입력 삭제",role:.destructive) {
-                            let id=sensor.wrappedValue.id;model.sensors.removeAll{$0.id==id};selectedSensor=model.sensors.first?.id;sensorPage=min(sensorPage,max(0,(model.sensors.count-1)/6))
-                        }
-                    }.frame(maxWidth:.infinity)
-                } else {Text("입력을 추가하세요.").foregroundStyle(.secondary).frame(maxWidth:.infinity)}
-            }
-            Text("장치에서 이 Mac의 IP와 UDP 포트로 전송 · 바인딩 0.0.0.0").font(.system(size:10)).foregroundStyle(.secondary)
-        }.font(.system(size:11)).textFieldStyle(.roundedBorder)
-    }
-    private var sensorBinding:Binding<SensorInput>? {
-        guard let id=selectedSensor,model.sensors.contains(where:{$0.id==id}) else{return nil}
-        return Binding(get:{model.sensors.first{$0.id==id}!},set:{value in if let i=model.sensors.firstIndex(where:{$0.id==id}) {model.sensors[i]=value}})
     }
     private var output:some View {
         VStack(alignment:.leading,spacing:12) {
@@ -491,19 +465,11 @@ private struct OrbitSettingsPanel: View {
                         Text("320–7680 px · 16 px 단위").font(.system(size:10)).foregroundStyle(.secondary)
                     }
                 }
-                HStack {
-                    Text(model.outputStatus).lineLimit(1);Spacer()
-                    Button(model.outputFullscreen ? "창 모드" : "전체화면"){model.toggleOutputFullscreen()}
-                        .disabled(!model.outputOpen).accessibilityIdentifier("outputSettingsFullscreen")
-                    Button(model.outputOpen ? "출력 중지" : "출력 시작") {
-                        if model.outputOpen {model.stopOutput()} else {model.startOutput()}
-                    }.buttonStyle(.borderedProminent).accessibilityIdentifier("outputSettingsStartStop")
-                }
                 Divider()
                 Picker("운영 화면 프리뷰",selection:$model.previewPolicy) {
                     ForEach(PreviewPolicy.allCases) { Text($0.label).tag($0) }
                 }.accessibilityIdentifier("previewPolicy")
-                Toggle("앱 실행 시 이전 수신·송신·출력 상태 복원",isOn:$model.resumeOnLaunch)
+                Toggle("앱 실행 시 이전 영상 출력 상태 복원",isOn:$model.resumeOnLaunch)
                     .accessibilityIdentifier("resumeInstallation")
                 if model.displayFallback { Text("저장한 모니터 없음 · 현재 화면으로 대체").foregroundStyle(.orange) }
                 Text(model.outputSizeLabel).font(.system(size:20,weight:.medium,design:.monospaced))
@@ -524,8 +490,7 @@ private struct OrbitSettingsPanel: View {
                     ParameterRouteButton(model:model,key:"flipV",title:"안쪽 / 바깥쪽 반전")
                 }
                 Divider()
-                Button("LED 테스트 씬 열기") {model.selectedSceneID="06_calibration";close()}
-                Text("구간 번호·그리드·안팎 방향·RGB·회색·단일 픽셀 패턴을 사용할 수 있습니다.").font(.system(size:11)).foregroundStyle(.secondary)
+                Text("메인 화면의 Calibration 씬에서 구간 번호·그리드·안팎 방향·RGB·회색·단일 픽셀 패턴을 선택합니다.").font(.system(size:11)).foregroundStyle(.secondary)
             }
         }.font(.system(size:12))
     }
@@ -568,16 +533,6 @@ private struct FrameRateReadout: View {
     }
 }
 
-struct SensorDot:View {
-    let sensor:SensorInput
-    let running:Bool
-    var body:some View {
-        TimelineView(.periodic(from:.now,by:1)){context in
-            let state=sensor.receptionState(running:running,now:context.date)
-            Circle().fill(state == .receiving ? orbitAccent : (state == .stale ? .orange : .gray)).frame(width:6,height:6)
-        }
-    }
-}
 private struct PatternPicker:View {
     @ObservedObject var model:OrbitModel
     let names=["구간 번호 / 방향","픽셀 그리드","구간 1–5 + 안팎 띠","RGB","16단계 회색","화이트","블랙","이동 마커","구간 이음새","1픽셀 체크","안쪽만 · 구간색 + 빨강 띠","바깥쪽만 · 구간색 + 파랑 띠"]

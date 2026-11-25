@@ -22,14 +22,20 @@ final class OrbitUpdater: NSObject, ObservableObject, SPUUpdaterDelegate, SPUSta
         startingUpdater: false, updaterDelegate: self, userDriverDelegate: self)
     private lazy var gate = UpdateInstallationGate(isBlocked: { [weak self] in
         guard let self, let model = self.model else { return true }
-        return model.outputOpen || model.controlOutputEnabled || model.performance.isRunning
+        return model.blocksUpdateInstallation
     }, prepare: { [weak self] in self?.prepareInstallation() })
 
     func startOnce(model: OrbitModel) {
         guard !started else { return }
         started = true
         self.model = model
-        model.$outputOpen.combineLatest(model.$controlOutputEnabled, model.performance.$isRunning)
+        Publishers.MergeMany([
+            model.$outputOpen.map {_ in ()}.eraseToAnyPublisher(),
+            model.$controlOutputEnabled.map {_ in ()}.eraseToAnyPublisher(),
+            model.performance.$isRunning.map {_ in ()}.eraseToAnyPublisher(),
+            model.$settings.map {_ in ()}.eraseToAnyPublisher(),
+            model.$selectedSceneID.map {_ in ()}.eraseToAnyPublisher()
+        ])
             // @Published sends before storage changes; consume after the model settles.
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.operationChanged() }.store(in: &subscriptions)
@@ -64,7 +70,7 @@ final class OrbitUpdater: NSObject, ObservableObject, SPUUpdaterDelegate, SPUSta
 
     private func operationChanged() {
         guard let model else { return }
-        isBlocked = model.outputOpen || model.controlOutputEnabled || model.performance.isRunning
+        isBlocked = model.blocksUpdateInstallation
         if gate.hasPendingInstallation {
             status = "업데이트 설치 대기"
             detail = isBlocked ? "영상 출력·제어 송신·성능 측정 중입니다. 종료 후 업데이트 메뉴에서 설치를 선택하세요." : "업데이트 메뉴에서 설치를 선택하면 확인 후 재시작합니다."
@@ -93,7 +99,7 @@ final class OrbitUpdater: NSObject, ObservableObject, SPUUpdaterDelegate, SPUSta
 
     private func showPendingUpdateNotice() {
         guard pendingUpdateNotice, let model,
-              !model.outputOpen, !model.controlOutputEnabled, !model.performance.isRunning else { return }
+              !model.blocksUpdateInstallation else { return }
         pendingUpdateNotice = false
         controller.checkForUpdates(nil)
     }
@@ -103,7 +109,7 @@ final class OrbitUpdater: NSObject, ObservableObject, SPUUpdaterDelegate, SPUSta
         model?.save()
         installing = true
         status = "업데이트 설치 중"
-        detail = "설정과 센서 매핑을 보존하고 새 버전으로 다시 실행합니다."
+        detail = "설정과 OSC 매핑을 보존하고 새 버전으로 다시 실행합니다."
     }
 
     private func report(_ error: Error) {
@@ -162,7 +168,7 @@ final class OrbitUpdater: NSObject, ObservableObject, SPUUpdaterDelegate, SPUSta
         // Sparkle's visible Install & Relaunch button provides consent here.
         // If operation has started since that choice, require a NEW confirmation
         // after it ends instead of restarting automatically when it becomes idle.
-        if let model, model.outputOpen || model.controlOutputEnabled || model.performance.isRunning {
+        if let model, model.blocksUpdateInstallation {
             readyVersion = item.displayVersionString
             gate.schedule(installHandler)
             operationChanged()

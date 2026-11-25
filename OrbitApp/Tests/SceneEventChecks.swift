@@ -16,7 +16,7 @@ final class EventInbox {
     }
 }
 
-/// UDP sensor -> actual model -> UDP receiver. Isolated preferences and MIDI source.
+/// UDP sensor -> actual model -> UDP receiver. Isolated preferences and local UDP.
 @main struct SceneEventChecks {
     static func pump(_ seconds: Double) { RunLoop.main.run(until:Date().addingTimeInterval(seconds)) }
     static func wait(_ message: String, _ predicate: () -> Bool) {
@@ -51,17 +51,18 @@ final class EventInbox {
         // Use one isolated suite for both initial load and reload, never the operator's preferences.
         defer {defaults.removePersistentDomain(forName:domain)}
         let bundle=Bundle(path:CommandLine.arguments[1])!
-        let model=OrbitModel(defaults:defaults,resources:bundle,controlOutput:ControlOutput(portName:"Orbit Distinct Event Test "+UUID().uuidString))
+        let model=OrbitModel(defaults:defaults,resources:bundle,controlOutput:ControlOutput())
         defer {model.shutdownForTermination()}
         model.playing=false
-        model.sensors=[SensorInput(name:"Login",address:"/qa/login"),SensorInput(name:"Value",address:"/qa/value")]
+        model.setOSCOutputDestination(.init(host:"127.0.0.1",port:Int(inbox.snapshot().1!)))
+        precondition(model.sensors.isEmpty)
         model.port=String(freePort());model.startOSC();wait("OSC receiver") {model.oscRunning}
         let source=NWConnection(host:"127.0.0.1",port:NWEndpoint.Port(rawValue:UInt16(model.port)!)!,using:.udp)
         source.start(queue:queue);defer {source.cancel()}
         func send(_ value:Float,_ address:String="/qa/login") {source.send(content:OSCEncoder.floatMessage(address:address,value:value),completion:.contentProcessed({_ in}))}
         func count(_ address:String)->Int {inbox.snapshot().0.flatMap {OSCDecoder.decode($0)}.filter {$0.address==address}.count}
         func output(_ key:String,_ address:String) {
-            model.setRoute(key) {$0.output.enabled=true;$0.output.transport = .osc;$0.output.host="127.0.0.1";$0.output.port=Int(inbox.snapshot().1!);$0.output.address=address;$0.output.minimum=0;$0.output.maximum=1}
+            model.setRoute(key) {$0.output.enabled=true;$0.output.transport = .osc;$0.output.address=address;$0.output.minimum=0;$0.output.maximum=1}
         }
         let scenes=model.scenes.filter {!$0.testScene};precondition(scenes.count==8)
         var tested=0
@@ -92,7 +93,7 @@ final class EventInbox {
             }
             // Identical OSC events are commands, not a sustained slider value.
             let key=model.sceneTriggers[0].id,address="/qa/event/"+scene.id+"/"+key
-            model.setRoute(key) {$0.input.enabled=true;$0.input.sensorID=model.sensors[0].id}
+            model.setRoute(key) {$0.input.directOSCAddress="/qa/login"}
             send(0.49);pump(0.03);precondition(count(address)==2)
             let cue=OSCEncoder.floatMessage(address:"/qa/login",value:1)!
             source.send(content:OSCEncoder.immediateBundle([cue,cue,cue]),completion:.contentProcessed({_ in}))
@@ -105,7 +106,7 @@ final class EventInbox {
         precondition(tested==24)
         // The add-line command changes topology, not a continuous parameter or temporary envelope.
         let addLine=SceneTrigger.addLineID,lineAddress="/qa/event/lines"
-        model.setRoute(addLine) {$0.input.enabled=true;$0.input.sensorID=model.sensors[0].id}
+        model.setRoute(addLine) {$0.input.directOSCAddress="/qa/login"}
         output(addLine,lineAddress)
         let continuousBefore=model.parameterValues
         precondition(model.pulseLineCount==3 && model.pulseLineLimit==10)
@@ -126,23 +127,23 @@ final class EventInbox {
         model.triggerParameter(addLine);precondition(model.pulseLineCount==4)
         wait("manual cue") {count(lineAddress)==11}
         model.restartPlayback();precondition(model.pulseLineCount==3)
-        model.setRoute(addLine) {$0.input.enabled=false}
+        model.setRoute(addLine) {$0.input.directOSCEnabled=false}
 
         let key=model.sceneTriggers[0].id,address="/qa/event/"+model.selectedSceneID+"/"+key
         model.setInputBehavior(key,.threshold)
         let before=count(address)
-        for (value,expected) in [(Float(0.1),0),(0.5,1),(1,1),(0.49,1),(0.51,1),(0.44,1),(0.5,2)] {
+        for (value,expected) in [(Float(0.1),0),(0.5,1),(1,2),(0.49,2),(0.51,3),(0.44,3),(0.5,4)] {
             send(value);pump(0.06);precondition(count(address)==before+expected)
         }
         // A continuous OSC input remains independent while a separate event watches its threshold.
-        let valueKey=model.shaderParameters.first!.id,spec=model.parameterSpec(valueKey)
+        let valueKey=model.shaderParameters.first!.id
         model.setRoute(valueKey) {
-            $0.input.enabled=true;$0.input.sensorID=model.sensors[1].id;$0.input.minimum=spec.range.lowerBound;$0.input.maximum=spec.range.upperBound;$0.input.smoothingSeconds=0
+            $0.input.directOSCAddress="/qa/value"
             $0.input.mode = .event;$0.output.mode = .event // Rejected: these are not trigger IDs.
         }
         precondition(model.route(for:valueKey).input.behavior == .continuous && model.route(for:valueKey).output.behavior == .continuous)
         output(valueKey,"/qa/continuous")
-        model.setRoute(key) {$0.input.sourceParameter=valueKey;$0.input.sensorID=nil;$0.input.mode = .threshold}
+        model.setRoute(key) {$0.input.sourceParameter=valueKey;$0.input.enabled=true;$0.input.mode = .threshold}
         send(0.1,"/qa/value");pump(0.07)
         let beforeSource=count(address)
         send(0.8,"/qa/value");wait("continuous source crossing") {count(address)==beforeSource+1}
@@ -157,7 +158,7 @@ final class EventInbox {
         // Continuous parameters cannot be invoked as event commands.
         model.triggerParameter(valueKey);precondition(model.parameterEventCount(valueKey)==0)
         model.save()
-        let restored=OrbitModel(defaults:defaults,resources:bundle,controlOutput:ControlOutput(portName:"Orbit Event Reload "+UUID().uuidString))
+        let restored=OrbitModel(defaults:defaults,resources:bundle,controlOutput:ControlOutput())
         defer {restored.shutdownForTermination()}
         for scene in scenes {
             restored.selectedSceneID=scene.id

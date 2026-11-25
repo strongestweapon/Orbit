@@ -1,118 +1,64 @@
 import Foundation
 import Network
-import CoreMIDI
 
 final class Received {
-    let lock = NSLock()
-    private var midi: [UInt32] = []
-    private var udp: [Data] = []
-    private var deliveries: [ControlDelivery] = []
-    private var listenPort: UInt16?
-    private var connections: [NWConnection] = []
-    func addMIDI(_ words: [UInt32]) {lock.lock();midi += words;lock.unlock()}
+    let lock=NSLock()
+    private var udp:[Data]=[]
+    private var deliveries:[ControlDelivery]=[]
+    private var listenPort:UInt16?
+    private var connections:[NWConnection]=[]
     func addUDP(_ data:Data) {lock.lock();udp.append(data);lock.unlock()}
     func addDelivery(_ value:ControlDelivery) {lock.lock();deliveries.append(value);lock.unlock()}
-    func deliverySnapshot() -> [ControlDelivery] {lock.lock();defer{lock.unlock()};return deliveries}
+    func deliverySnapshot()->[ControlDelivery] {lock.lock();defer{lock.unlock()};return deliveries}
     func setPort(_ port:UInt16) {lock.lock();listenPort=port;lock.unlock()}
     func hold(_ connection:NWConnection) {lock.lock();connections.append(connection);lock.unlock()}
-    func snapshot() -> ([UInt32],[Data],UInt16?) {lock.lock();defer{lock.unlock()};return (midi,udp,listenPort)}
+    func snapshot()->([Data],UInt16?) {lock.lock();defer{lock.unlock()};return (udp,listenPort)}
 }
 
 @main struct ControlOutputChecks {
     static func main() throws {
-        let received = Received()
-        let name = "Orbit Validation \(UUID().uuidString.prefix(8))"
-        let sender = ControlOutput(portName:name)
-        sender.onStatus = { log($0) }
-        sender.onDelivery = { received.addDelivery($0) }
-        sender.prepare()
-        var source = MIDIEndpointRef()
-        wait("virtual MIDI source registration") {
-            for index in 0..<MIDIGetNumberOfSources() {
-                let endpoint = MIDIGetSource(index)
-                var text: Unmanaged<CFString>?
-                if MIDIObjectGetStringProperty(endpoint,kMIDIPropertyName,&text) == noErr,
-                   let text, (text.takeRetainedValue() as String) == name {source=endpoint;return true}
-            }
-            return false
+        let received=Received(),sender=ControlOutput()
+        sender.onDelivery={received.addDelivery($0)}
+        let listener=try NWListener(using:.udp,on:.any)
+        let queue=DispatchQueue(label:"orbit-validation-udp")
+        listener.stateUpdateHandler={state in if case .ready=state,let port=listener.port {received.setPort(port.rawValue)}}
+        listener.newConnectionHandler={connection in
+            received.hold(connection);connection.start(queue:queue);receive(connection,into:received)
         }
-        var client = MIDIClientRef(), port = MIDIPortRef()
-        precondition(MIDIClientCreateWithBlock("Orbit Validation Listener" as CFString,&client,nil) == noErr)
-        precondition(MIDIInputPortCreateWithProtocol(client,"Input" as CFString,._1_0,&port,{events,_ in
-            // CoreMIDI may batch several packets in one callback, including on resume.
-            var packet=UnsafeRawPointer(events).advanced(by:MemoryLayout<MIDIEventList>.offset(of:\.packet)!)
-                .assumingMemoryBound(to:MIDIEventPacket.self)
-            for _ in 0..<events.pointee.numPackets {
-                let words=UnsafeRawPointer(packet).advanced(by:MemoryLayout<MIDIEventPacket>.offset(of:\.words)!)
-                    .assumingMemoryBound(to:UInt32.self)
-                received.addMIDI(Array(UnsafeBufferPointer(start:words,count:Int(packet.pointee.wordCount))))
-                packet=UnsafePointer(MIDIEventPacketNext(packet))
-            }
-        }) == noErr)
-        precondition(MIDIPortConnectSource(port,source,nil) == noErr)
-        defer {MIDIPortDispose(port);MIDIClientDispose(client)}
-
-        let listener = try NWListener(using:.udp,on:.any)
-        let queue = DispatchQueue(label:"orbit-validation-udp")
-        listener.stateUpdateHandler = {state in if case .ready = state, let port=listener.port {received.setPort(port.rawValue)}}
-        listener.newConnectionHandler = {connection in
-            received.hold(connection);connection.start(queue:queue)
-            receive(connection,into:received)
-        }
-        listener.start(queue:queue)
-        defer {listener.cancel()}
-        wait("UDP listener ready") {received.snapshot().2 != nil}
-        var midi = ParameterOutputRoute();midi.channel=5;midi.controller=74
-        var midi2 = midi;midi2.channel=2;midi2.controller=21
-        var osc = ParameterOutputRoute();osc.transport = .osc;osc.port=Int(received.snapshot().2!)
-        osc.address="/orbit/test/speed";osc.maximum=1
-        let messages = [ControlEmission(id:"a",route:midi,value:100),ControlEmission(id:"b",route:midi2,value:64),
-                        ControlEmission(id:"c",route:osc,value:0.25)]
-        sender.send(messages)
-        wait("MIDI and UDP first packets") {let s=received.snapshot();return s.0.count>=2 && s.1.count>=1}
-        let first=received.snapshot()
-        precondition(Set(first.0)==Set([UInt32(0x20B44A64),UInt32(0x20B11540)]),"Wrong MIDI CC/channel/value: \(first.0)")
-        precondition(first.1[0].starts(with:Data("/orbit/test/speed\0".utf8)))
-        precondition(Array(first.1[0].suffix(4)) == [62,128,0,0],"Wrong OSC float wire value")
-        wait("per-parameter local delivery receipts") {received.deliverySnapshot().count==3}
-        let deliveries=received.deliverySnapshot()
-        precondition(Set(deliveries.map(\.id))==Set(["a","b","c"]))
-        precondition(deliveries.allSatisfy {$0.error==nil && abs($0.at.timeIntervalSinceNow)<5})
-        precondition(deliveries.first {$0.id=="c"}?.value==0.25)
-        precondition(deliveries.first {$0.id=="a"}?.destination==midi.destinationKey)
-        sender.send(messages)
-        pump(0.3)
-        let same=received.snapshot()
-        precondition(same.0.count==2 && same.1.count==1,"Unchanged values were not coalesced")
-        precondition(received.deliverySnapshot().count==3,"Coalesced frames must not claim another transmission")
-        sender.send([ControlEmission(id:"c",route:osc,value:0.5)],force:true)
-        wait("forced UDP test packet") {received.snapshot().1.count==2}
-        precondition(Array(received.snapshot().1[1].suffix(4)) == [63,0,0,0])
-        wait("forced output delivery") {received.deliverySnapshot().last?.value==0.5}
-        sender.reset();sender.send(messages)
-        wait("reset/resume MIDI packets") {received.snapshot().0.count>=4}
-        wait("reset/resume UDP packets") {received.snapshot().1.count>=3}
-        let before=received.snapshot()
+        listener.start(queue:queue);defer{listener.cancel()}
+        wait("UDP listener ready"){received.snapshot().1 != nil}
+        var osc=ParameterOutputRoute();osc.port=Int(received.snapshot().1!);osc.address="/orbit/test/speed"
+        let message=ControlEmission(id:"speed",route:osc,value:0.25)
+        sender.send([message])
+        wait("OSC float packet"){received.snapshot().0.count==1 && received.deliverySnapshot().count==1}
+        precondition(Array(received.snapshot().0[0].suffix(4))==[62,128,0,0],"Wrong OSC float wire value")
+        let delivery=received.deliverySnapshot()[0]
+        precondition(delivery.error==nil && delivery.value==0.25 && delivery.signal==osc.address && delivery.destination==osc.destinationKey)
+        sender.send([message]);pump(0.2)
+        precondition(received.snapshot().0.count==1 && received.deliverySnapshot().count==1,"Identical continuous frames must coalesce")
+        sender.send([ControlEmission(id:"speed",route:osc,value:0.5)],force:true)
+        wait("forced test"){received.snapshot().0.count==2 && received.deliverySnapshot().last?.value==0.5}
+        precondition(Array(received.snapshot().0[1].suffix(4))==[63,0,0,0])
+        sender.reset();sender.send([message])
+        wait("reset/resume"){received.snapshot().0.count==3}
+        var legacy=osc;legacy.transport = .midi;legacy.maximum=127
+        sender.send([ControlEmission(id:"legacy",route:legacy,value:64)],force:true)
+        sender.sendEvents([ControlEmission(id:"legacy",route:legacy,value:127)])
+        pump(0.2);precondition(received.snapshot().0.count==3,"Legacy MIDI routes must not leak unnormalized data to UDP")
         var angle=osc;angle.address="/event/angle"
         var trigger=osc;trigger.address="/event/crossing"
         let event=[ControlEmission(id:"angle",route:angle,value:0.3),ControlEmission(id:"trigger",route:trigger,value:1)]
-        for _ in 0..<3 { sender.sendEvents(event) }
-        wait("three identical bundled events") {received.snapshot().1.count>=before.1.count+3}
-        let bundles=Array(received.snapshot().1.suffix(3))
+        for _ in 0..<3 {sender.sendEvents(event)}
+        wait("repeated bundled events"){received.snapshot().0.count==6}
+        let bundles=Array(received.snapshot().0.suffix(3))
         precondition(bundles.allSatisfy {$0.starts(with:Data("#bundle\0".utf8))})
         precondition(bundles.allSatisfy {OSCDecoder.decode($0).map(\.address)==["/event/angle","/event/crossing"]})
-        precondition(bundles.allSatisfy {OSCDecoder.decode($0).last?.values == [1]})
-        let count=received.snapshot().1.count
+        precondition(bundles.allSatisfy {OSCDecoder.decode($0).last?.values==[1]})
         sender.send([],retaining:[trigger,angle]);pump(2.2)
-        precondition(received.snapshot().1.count==count,"Event channels must not heartbeat/replay")
-        sender.sendEvents(event)
-        wait("event-only connection retained") {received.snapshot().1.count==count+1}
-        sender.sendEvents([ControlEmission(id:"edge",route:midi,value:0),ControlEmission(id:"edge",route:midi,value:127)])
-        sender.sendEvents([ControlEmission(id:"edge",route:midi,value:0),ControlEmission(id:"edge",route:midi,value:127)])
-        wait("MIDI retrigger edges") {received.snapshot().0.count>=before.0.count+4}
-        precondition(received.snapshot().0.suffix(4).map {$0 & 0x7f} == [0,127,0,127])
-        print("PASS: bundles, identical repeated events, no heartbeat, MIDI trigger edges")
-        print("PASS: real CoreMIDI + UDP loopback, per-parameter delivery status/values, change coalescing, forced test, reset/resume")
+        precondition(received.snapshot().0.count==6,"Events must not heartbeat/replay")
+        sender.sendEvents(event,test:true)
+        wait("event test on retained connection"){received.snapshot().0.count==7}
+        print("PASS: OSC-only UDP float packets and delivery receipts, continuous coalescing, forced tests, reset/resume, legacy MIDI rejection, repeated bundles without heartbeat")
         withExtendedLifetime(sender) {}
     }
     static func receive(_ connection:NWConnection,into received:Received) {
@@ -121,11 +67,9 @@ final class Received {
             if error == nil {receive(connection,into:received)}
         }
     }
-    static func wait(_ name:String,_ ready:()->Bool) {
-        log("Waiting: \(name)")
-        let deadline=Date().addingTimeInterval(20)
-        while !ready() {precondition(Date()<deadline,"Timed out: \(name)");pump(0.01)}
+    static func wait(_ label:String,_ predicate:()->Bool) {
+        let end=Date().addingTimeInterval(10)
+        while !predicate(){precondition(Date()<end,label);pump(0.01)}
     }
-    static func log(_ text:String) {FileHandle.standardError.write(Data((text+"\n").utf8))}
-    static func pump(_ duration:Double) {RunLoop.current.run(until:Date().addingTimeInterval(duration))}
+    static func pump(_ duration:Double){RunLoop.current.run(until:Date().addingTimeInterval(duration))}
 }

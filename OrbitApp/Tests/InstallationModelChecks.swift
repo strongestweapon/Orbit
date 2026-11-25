@@ -48,8 +48,9 @@ import AppKit
         precondition(restored.uniforms(width:3840,height:2160,view:2)[3]<0.05,"Same-scene cue must reset clock")
         restored.receiveOSC(address:cue.address,values:[0.49])
         precondition(restored.globalReceipts[cue.id]?.triggerCount==3)
-        restored.receiveOSC(address:restored.sensors[0].address,values:[0.7])
-        precondition(restored.sensors[0].value==0.7)
+        let brightnessAddress=restored.inputOSCAddress("brightness",sceneID:restored.selectedSceneID,textured:false)
+        restored.receiveOSC(address:brightnessAddress,values:[0.7])
+        precondition(abs(restored.normalizedParameterValue("brightness")-0.7)<0.00001)
         restored.selectedSceneID=PulseOrbitSimulation.sceneID
         restored.playing=false
         let initial=restored.uniforms(width:1920,height:1080,view:1)
@@ -72,21 +73,22 @@ import AppKit
         precondition(Array(recolored[24..<48])==Array(initial[24..<48]),"Color edits must not restart or move pulses")
         precondition(!restored.parameterSpecs.contains { $0.id=="hueShift" })
         var directionRoute=restored.route(for:"directionDrive")
-        directionRoute.input.enabled=true;directionRoute.input.sensorID=restored.sensors[0].id
+        directionRoute.input.directOSCAddress="/qa/direction"
         directionRoute.input.minimum=0;directionRoute.input.maximum=1;directionRoute.input.smoothingSeconds=0
         restored.setRoute("directionDrive") { $0=directionRoute }
+        restored.receiveOSC(address:"/qa/direction",values:[0.7])
         precondition(abs(restored.uniforms(width:3840,height:2160,view:2)[4]-0.7)<0.00001)
         restored.setNormalizedParameterValue("pulseLength",0.8)
         restored.resetSceneAppearance()
         precondition(restored.normalizedParameterValue("middleHue")==1)
         precondition(abs(restored.normalizedParameterValue("rhythmAmount")-0.85)<0.00001 && restored.normalizedParameterValue("counterflow")==1)
         precondition(restored.normalizedParameterValue("outerReverse")==1 && abs(restored.normalizedParameterValue("linkStrength")-0.65)<0.00001)
-        precondition(restored.route(for:"directionDrive").input.enabled)
+        precondition(restored.route(for:"directionDrive").input.directOSCAddress=="/qa/direction")
         precondition(abs(restored.normalizedParameterValue("pulseLength")-0.62)<0.00001)
         precondition(Array(restored.uniforms(width:3840,height:2160,view:2)[24..<48])==PulseOrbitSimulation().uniforms)
         restored.save()
         var stored=try JSONDecoder().decode(StoredSettings.self,from:defaults.data(forKey:"OrbitSettings.v1")!)
-        precondition(stored.sensors[0].value==nil && stored.sensors[0].receivedAt==nil)
+        precondition(stored.sensors.isEmpty)
         stored.installation?.displayUUID="missing-monitor-uuid"
         defaults.set(try JSONEncoder().encode(stored),forKey:"OrbitSettings.v1")
         let fallback=OrbitModel(defaults:defaults,resources:bundle)
@@ -110,6 +112,6 @@ import AppKit
         fallback.receiveOSC(address:cue.address,values:[0.8])
         precondition(defaults.data(forKey:"OrbitSettings.v1")==beforeCleanup,"Shutdown must preserve the pre-cleanup snapshot")
         precondition(fallback.globalReceipts.isEmpty,"Late OSC must not restart a closing session")
-        print("PASS: model save/reload, scene controls, FPS, OSC config, repeated scene restarts, missing/reconnected monitor, no stale sensor state")
+        print("PASS: model save/reload, scene controls, FPS, OSC config, repeated scene restarts, missing/reconnected monitor, no sensor registry or stale receipts")
     }
 }

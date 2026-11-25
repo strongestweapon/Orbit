@@ -1,5 +1,32 @@
 import Foundation
 import Network
+import Darwin
+
+struct OSCNetworkAddress: Identifiable {
+    let interface: String
+    let address: String
+    var id: String {interface+":"+address}
+    static func current() -> [Self] {
+        var head: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&head) == 0,let first=head else {return []}
+        defer {freeifaddrs(first)}
+        var results:[Self]=[]
+        var cursor:UnsafeMutablePointer<ifaddrs>?=first
+        while let item=cursor {
+            defer {cursor=item.pointee.ifa_next}
+            let entry=item.pointee
+            guard let socket=entry.ifa_addr,Int32(entry.ifa_flags) & IFF_UP != 0,
+                  Int32(entry.ifa_flags) & IFF_LOOPBACK == 0,socket.pointee.sa_family == UInt8(AF_INET) else {continue}
+            var host=[CChar](repeating:0,count:Int(NI_MAXHOST))
+            guard getnameinfo(socket,socklen_t(socket.pointee.sa_len),&host,socklen_t(host.count),nil,0,NI_NUMERICHOST)==0 else {continue}
+            results.append(.init(interface:String(cString:entry.ifa_name),address:String(cString:host)))
+        }
+        return results.sorted {
+            if $0.interface.hasPrefix("en") != $1.interface.hasPrefix("en") {return $0.interface.hasPrefix("en")}
+            return $0.id.localizedStandardCompare($1.id) == .orderedAscending
+        }
+    }
+}
 
 struct OSCMessage { let address: String; let values: [Double] }
 

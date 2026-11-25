@@ -44,9 +44,9 @@ import Foundation
                     close(spec.normalized(spec.rawValue(normalized:position)),expected)
                 }
                 let output = ParameterRoute.defaults(scene:scene.id,parameter:p.id,spec:spec).output
-                precondition(output.controller == p.midiCC)
+                precondition(output.transport == .osc)
                 close(output.mappedValue(p.minimum,spec:spec)!,0)
-                close(output.mappedValue(p.maximum,spec:spec)!,127)
+                close(output.mappedValue(p.maximum,spec:spec)!,1)
             }
             let encoded = try JSONEncoder().encode(old)
             let restored = try JSONDecoder().decode(SceneSettings.self,from:encoded)
@@ -77,7 +77,7 @@ import Foundation
         close(speed.rawValue(normalized:2),3);close(speed.rawValue(normalized:-1),0)
         close(speed.rawValue(normalized:.nan),0)
         precondition(!specs.contains { $0.id == "energy" })
-        print("PASS: variable-size scene catalogs, stable MIDI defaults, semantic ranges, legacy values/routes/endpoints preserved, texture isolation, save/reload, independent bar length/width sensor mapping")
+        print("PASS: variable-size scene catalogs, OSC-only defaults, semantic ranges, legacy values/routes/endpoints preserved, texture isolation, save/reload, independent bar length/width sensor mapping")
     }
     static func close(_ a:Double,_ b:Double,tolerance:Double=0.00000001) {precondition(abs(a-b)<tolerance,"\(a) != \(b)")}
 }

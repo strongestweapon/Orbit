@@ -1,6 +1,6 @@
 import SwiftUI
 
-private struct MappingRow: Identifiable {
+struct MappingRow: Identifiable {
     var id: String
     var title: String
     var scope: String
@@ -12,58 +12,171 @@ private struct MappingRow: Identifiable {
     var textured = false
     var spec: ParameterSpec?
     var route: ParameterRoute?
+    var configured = false
+    var searchText = ""
+    var sortAddress = ""
+    var globalRoute: GlobalOSCMapping?
+    var isEvent: Bool {globalID != nil || spec?.isTrigger == true || spec?.eventOutput == true}
+
+    private static func number(_ value: Double, integer: Bool = false) -> String {
+        value.formatted(.number.locale(Locale(identifier:"en_US_POSIX"))
+            .grouping(.never).precision(.fractionLength(integer ? 0...0 : 1...6)))
+    }
+    private static func thresholdLabel(_ settings: EventThreshold) -> String {
+        let threshold=settings.sanitized
+        let reset=max(0,threshold.level-threshold.hysteresis)
+        // With zero hysteresis the latch still requires a value strictly below the threshold.
+        let resetCondition=threshold.hysteresis == 0 ? "< \(number(threshold.level))" : "≤ \(number(reset))"
+        return "≥ \(number(threshold.level)) 진입 시 1회\n\(resetCondition) 이후 다시 진입하면 반복"
+    }
+    var inputRangeLabel: String {
+        if spec?.outputOnly == true {return "외부 입력 없음"}
+        if route?.input.sourceParameter != nil && route?.input.enabled == true {return "영상 연속값 0.0–1.0"}
+        return "OSC Float 0.0–1.0"
+    }
+    var conditionLabel: String {
+        if let global=globalRoute {
+            return global.triggerMode == .threshold ? Self.thresholdLabel(global.threshold ?? .init()) : "≥ 0.5 수신마다 1회"
+        }
+        guard let spec,let route else {return ""}
+        if spec.outputOnly {return spec.eventOutput ? "실제 교차가 발생할 때마다 1회" : "시뮬레이션 연속값 0.0–1.0"}
+        if spec.isTrigger {
+            let extra=route.input.behavior == .threshold ? Self.thresholdLabel(route.input.eventSettings.threshold) : "≥ 0.5 수신마다 1회"
+            if route.input.receivesDirectOSC && route.input.enabled && route.input.sourceParameter != nil && route.input.behavior == .threshold {return "직접 ≥ 0.5 수신마다 1회\n영상 값: "+extra}
+            return route.input.receivesDirectOSC ? "≥ 0.5 수신마다 1회" : extra
+        }
+        return "0.0 → 1.0"
+    }
+    var outputRangeLabel: String? {
+        guard let spec,let route else {return nil}
+        let output=route.output
+        let cue=output.sendsTriggerValue(spec:spec)
+        let range=cue ? "1.0"
+            : "\(Self.number(output.minimum)) → \(Self.number(output.maximum))"
+        let timing=output.behavior == .trigger
+            ? (spec.outputOnly ? (spec.eventOutput ? "교차마다 트리거" : "값 변경마다 트리거") : "입력마다 트리거")
+            : output.sendsEvents(spec:spec) ? "1회" : "연속"
+        return "OSC Float \(range) · \(timing)"+(output.enabled ? "" : " (꺼짐)")
+    }
 }
 
-/// A single paged overview; editing an inactive scene never changes the on-air scene.
+extension OrbitModel {
+    /// Project the current control catalog, including commands never configured by the operator.
+    /// Saved routes supply connections; they do not define which controls exist.
+    var mappingRows: [MappingRow] {
+        var result=globalOSC.map { route in
+            MappingRow(id:route.id.uuidString,
+                title:route.action == .scene ? (scenes.first {$0.id == route.sceneID}?.name ?? "씬 선택") : route.action.label,
+                scope:route.triggerMode == .threshold ? "글로벌 · 임계값 통과" : "글로벌 · 수신마다 트리거",
+                address:route.address,active:route.enabled,value:globalReceipts[route.id]?.value,globalID:route.id,configured:true,sortAddress:route.address,globalRoute:route)
+        }
+        for scene in scenes where !scene.testScene {
+            for textured in (scene.texture == nil ? [false] : [false,true]) {
+                let catalog=specs(for:scene.id,textured:textured)
+                let savedRoutes=(textured ? settings[scene.id]?.textureParameterRoutes : settings[scene.id]?.parameterRoutes) ?? [:]
+                let ordered=catalog.filter(\.isTrigger)+catalog.filter {!$0.isTrigger}
+                let active=selectedSceneID == scene.id && usesTexture == textured
+                for spec in ordered {
+                    let defaults=effectiveRoute(ParameterRoute.defaults(scene:scene.id,parameter:spec.id,spec:spec))
+                    let route=effectiveRoute(savedRoutes[spec.id] ?? defaults)
+                    let source=route.input.enabled ? route.input.sourceParameter.map {key in catalog.first {$0.id==key}?.title ?? key} : nil
+                    let configured=route.input.enabled && route.input.sourceParameter != nil || route.output.isListed(defaultRoute:defaults.output)
+                    let direct=inputOSCAddress(spec.id,sceneID:scene.id,textured:textured)
+                    let address=spec.outputOnly ? route.output.address : direct+(source.map {"\n영상 값: "+$0} ?? "")
+                    result.append(MappingRow(id:"\(scene.id):\(textured):\(spec.id)",title:spec.title,
+                        scope:scene.name+" · "+(textured ? "원본" : "실시간")+" · "+(spec.isTrigger || spec.eventOutput ? "트리거" : "연속값"),
+                        address:address,active:active,value:active ? directOSCReceipts[spec.id]?.value : nil,sceneID:scene.id,textured:textured,spec:spec,route:route,configured:configured || route.input.directOSCAddress != nil || route.input.directOSCEnabled != nil,
+                        searchText:[spec.id,route.output.endpointLabel].joined(separator:" "),
+                        sortAddress:spec.outputOnly ? route.output.address : direct))
+                }
+            }
+        }
+        return result.sorted { left,right in
+            if (left.globalID != nil) != (right.globalID != nil) {return left.globalID != nil}
+            if left.globalID != nil {
+                let sceneActions:[GlobalOSCAction]=[.scene,.next,.previous]
+                let leftScene=left.globalRoute.map {sceneActions.contains($0.action)} ?? false
+                let rightScene=right.globalRoute.map {sceneActions.contains($0.action)} ?? false
+                if leftScene != rightScene {return leftScene}
+            } else {
+                if left.sceneID != right.sceneID {return (left.sceneID ?? "").localizedStandardCompare(right.sceneID ?? "") == .orderedAscending}
+                if left.textured != right.textured {return !left.textured}
+            }
+            let order=left.sortAddress.localizedStandardCompare(right.sortAddress)
+            return order == .orderedSame ? left.id < right.id : order == .orderedAscending
+        }
+    }
+}
+
+/// A single overview; editing an inactive scene never changes the on-air scene.
 struct OSCMappingView: View {
     @ObservedObject var model: OrbitModel
     let close: () -> Void
     @State private var scope = 0
     @State private var signalType = 0
     @State private var sceneFilter = ""
-    @State private var page = 0
     @State private var selectedID: String?
-    @State private var editingParameter: ParameterSpec?
-    private let pageSize = 5
+    @State private var editingParameter: MappingRow?
+    @State private var search = ""
+    @State private var sourceFilter = 0
+    @State private var receivePort = ""
+    @State private var outputHost = ""
+    @State private var outputPort = ""
+    private var proposedOutput: OSCOutputDestination {.init(host:outputHost,port:Int(outputPort.trimmingCharacters(in:.whitespacesAndNewlines)) ?? 0)}
+    private var networkIssue: String? {
+        guard let number=UInt16(receivePort.trimmingCharacters(in:.whitespacesAndNewlines)),number>0 else {return "수신 UDP 포트는 1–65535 범위입니다."}
+        return proposedOutput.validationError
+    }
+    private var networkChanged: Bool {receivePort != model.port || proposedOutput.normalized != model.oscOutputDestination}
+    private func loadNetworkSettings() {
+        receivePort=model.port;outputHost=model.oscOutputDestination.host;outputPort=String(model.oscOutputDestination.port)
+    }
+    private func applyNetworkSettings() {
+        if model.applyOSCNetworkSettings(receivePort:receivePort,output:proposedOutput) {loadNetworkSettings()}
+    }
 
     private var rows: [MappingRow] {
-        var result = model.globalOSC.map { route in
-            MappingRow(id:route.id.uuidString,
-                title:route.action == .scene ? (model.scenes.first { $0.id == route.sceneID }?.name ?? "씬 선택") : route.action.label,
-                scope:route.triggerMode == .threshold ? "글로벌 · 임계값 통과" : "글로벌 · 수신마다 트리거",address:route.address,active:route.enabled,
-                value:model.globalReceipts[route.id]?.value,globalID:route.id)
-        }
-        for scene in model.scenes where !scene.testScene {
-            for textured in [false,true] {
-                let routes = (textured ? model.settings[scene.id]?.textureParameterRoutes : model.settings[scene.id]?.parameterRoutes) ?? [:]
-                for (key,route) in routes.sorted(by: { $0.key < $1.key }) {
-                    guard route.input.behavior != .continuous || route.input.sensorID != nil || route.input.enabled || route.output.isListed(defaultRoute:ParameterRoute.defaults(scene:scene.id,parameter:key).output) else { continue }
-                    let spec = model.specs(for:scene.id,textured:textured).first {$0.id==key} ?? ParameterSpec.find(key)
-                    let sensor = model.sensors.first { $0.id == route.input.sensorID }
-                    result.append(MappingRow(id:"\(scene.id):\(textured):\(key)",title:spec.title,
-                        scope:scene.name+(textured ? " · 원본" : "")+" · "+(spec.isTrigger || spec.eventOutput ? "트리거 이벤트" : "연속값"),address:spec.outputOnly ? (spec.eventOutput ? "교차 이벤트 → 출력" : "시뮬레이션 → 출력") : (route.input.sourceParameter.map {source in "영상 값 · "+(model.specs(for:scene.id,textured:textured).first {$0.id==source}?.title ?? source)} ?? sensor?.address ?? "버튼 / 입력 연결 없음"),
-                        active:model.selectedSceneID == scene.id && model.usesTexture == textured,
-                        value:spec.outputOnly && model.selectedSceneID == scene.id ? model.controlValue(key) : sensor?.value,sceneID:scene.id,textured:textured,spec:spec,route:route))
-                }
-            }
-        }
-        return result.filter { row in
-            let event = row.globalID != nil || row.spec?.isTrigger == true || row.spec?.eventOutput == true
-            return (signalType == 0 || (signalType == 1 ? !event : event)) && (scope == 0 || (scope == 1 ? row.globalID != nil : row.sceneID == (sceneFilter.isEmpty ? model.selectedSceneID : sceneFilter)))
+        let query=search.trimmingCharacters(in:.whitespacesAndNewlines)
+        return model.mappingRows.filter { row in
+            (scope == 1 || signalType == 0 || (signalType == 1 ? !row.isEvent : row.isEvent))
+            && (scope == 0 || (scope == 1 ? row.globalID != nil : row.sceneID == (sceneFilter.isEmpty ? model.selectedSceneID : sceneFilter)))
+            && (sourceFilter == 0 || row.globalID != nil || row.textured == (sourceFilter == 2))
+            && (query.isEmpty || [row.title,row.scope,row.address,row.searchText].joined(separator:" ").localizedCaseInsensitiveContains(query))
         }
     }
     private var selected: MappingRow? { rows.first { $0.id == selectedID } }
-    private var visible: [MappingRow] { Array(rows.dropFirst(page*pageSize).prefix(pageSize)) }
 
     var body: some View {
-        VStack(alignment:.leading,spacing:12) {
+        VStack(alignment:.leading,spacing:8) {
             HStack {
-                Text("OSC 매핑").font(.title2)
-                Text("Float 0.0–1.0 · UDP \(model.port)").foregroundStyle(.secondary)
+                Text("OSC 전체 맵").font(.title2)
+                Text("입력 Float 0.0–1.0").foregroundStyle(.secondary)
                 Spacer()
-                Button(model.oscRunning ? "수신 중지" : "수신 시작") { model.oscRunning ? model.stopOSC() : model.startOSC() }
                 Button("닫기",action:close).keyboardShortcut(.cancelAction)
             }
+            HStack(alignment:.bottom,spacing:12) {
+                OSCLocalAddressView()
+                VStack(alignment:.leading,spacing:3) {
+                    Text("OSC 수신 · UDP 포트").font(.caption).foregroundStyle(.secondary)
+                    TextField("9000",text:$receivePort).frame(width:100).accessibilityIdentifier("oscReceivePort")
+                }
+                Divider().frame(height:32)
+                VStack(alignment:.leading,spacing:3) {
+                    Text("공통 OSC 출력 · 대상 IP / 호스트").font(.caption).foregroundStyle(.secondary)
+                    TextField("127.0.0.1",text:$outputHost).frame(minWidth:150,maxWidth:230).accessibilityIdentifier("oscOutputHost")
+                }
+                VStack(alignment:.leading,spacing:3) {
+                    Text("출력 UDP 포트").font(.caption).foregroundStyle(.secondary)
+                    TextField("9001",text:$outputPort).frame(width:100).accessibilityIdentifier("oscOutputPort")
+                }
+                Button(networkChanged || model.oscRunning ? "적용" : "다시 연결",action:applyNetworkSettings).disabled((!networkChanged && model.oscRunning) || networkIssue != nil).accessibilityIdentifier("applyOSCNetwork")
+                Spacer()
+                Text("모든 씬의 OSC 출력에 적용\n127.0.0.1 = 이 Mac")
+                    .font(.caption).foregroundStyle(.secondary)
+            }.onSubmit {if networkIssue == nil && (networkChanged || !model.oscRunning) {applyNetworkSettings()}}
+            if networkChanged,let issue=networkIssue {Text(issue).font(.caption).foregroundStyle(.orange)}
+            if !model.oscRunning {Text(model.oscState).font(.caption).foregroundStyle(.orange)}
+            Divider()
             HStack {
                 Picker("범위",selection:$scope) { Text("전체").tag(0);Text("글로벌").tag(1);Text("영상별").tag(2) }
                     .pickerStyle(.segmented).frame(width:280).accessibilityIdentifier("mappingScope")
@@ -74,181 +187,206 @@ struct OSCMappingView: View {
                     }
                 }
                 Spacer()
-                Button("글로벌 추가") {
-                    let route = GlobalOSCMapping(address:"/orbit/cue/\(model.globalOSC.count+1)",action:.restart)
-                    model.globalOSC.append(route);scope=1;selectedID=route.id.uuidString;page=max(0,(model.globalOSC.count-1)/pageSize)
-                }.accessibilityIdentifier("addGlobalOSC")
             }
-            Picker("신호 종류",selection:$signalType) {Text("전체 신호").tag(0);Text("연속값").tag(1);Text("트리거 이벤트").tag(2)}
-                .pickerStyle(.segmented).accessibilityIdentifier("mappingSignalType")
+            if scope != 1 {
             HStack {
-                Text("수신 주소 / 제어 출력").frame(width:280,alignment:.leading)
-                Text("제어 대상 / 범위").frame(maxWidth:.infinity,alignment:.leading)
-                Text("최근 값 · 상태").frame(width:125,alignment:.trailing)
-            }.font(.caption).foregroundStyle(.secondary)
-            VStack(spacing:4) {
-                ForEach(visible) { row in
-                    Button { selectedID=row.id } label: {
+                Picker("신호 종류",selection:$signalType) {Text("전체 신호").tag(0);Text("연속값").tag(1);Text("트리거 이벤트").tag(2)}
+                    .pickerStyle(.segmented).frame(width:330).accessibilityIdentifier("mappingSignalType")
+                Picker("영상 소스",selection:$sourceFilter) {Text("모든 방식").tag(0);Text("실시간 생성").tag(1);Text("원본 재생").tag(2)}
+                    .frame(width:200).accessibilityIdentifier("mappingSource")
+                Spacer()
+            }
+            }
+            HStack {
+                TextField("이벤트·파라미터·씬·OSC 주소 검색",text:$search).accessibilityIdentifier("mappingSearch")
+                Text("\(rows.count)개").font(.caption).foregroundStyle(.secondary)
+            }
+            HStack {
+                Text("수신 주소 / 제어 출력").frame(width:300,alignment:.leading)
+                Text("제어 대상 / 씬").frame(maxWidth:.infinity,alignment:.leading)
+                Text("값 범위 / 트리거 조건").frame(width:250,alignment:.leading)
+                Text("최근 값 · 상태").frame(width:85,alignment:.trailing)
+            }.padding(.horizontal,9).font(.caption).foregroundStyle(.secondary)
+            ScrollViewReader { proxy in
+            ScrollView {
+            LazyVStack(spacing:3) {
+                ForEach(rows) { row in
+                    Button {
+                        selectedID=row.id
+                        if row.globalID == nil {editingParameter=row}
+                    } label: {
                         HStack(spacing:12) {
                             VStack(alignment:.leading,spacing:4) {
-                                Text(row.address).font(.system(size:11,design:.monospaced)).lineLimit(1).truncationMode(.middle)
-                                Text(row.route?.output.enabled == true ? "→ "+(row.route?.output.endpointLabel ?? "") : (row.globalID == nil ? "출력 꺼짐" : "이벤트 동작"))
-                                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                            }.frame(width:280,alignment:.leading)
-                            VStack(alignment:.leading,spacing:4) {
-                                Text(row.title);Text(row.scope).font(.caption).foregroundStyle(.secondary)
-                            }.frame(maxWidth:.infinity,alignment:.leading)
-                            VStack(alignment:.trailing,spacing:4) {
-                                TimelineView(.periodic(from:.now,by:0.2)) { _ in
-                                    let live = row.spec?.outputOnly == true && row.active ? row.spec.map {model.controlValue($0.id)} : row.value
-                                    if let spec=row.spec, spec.isTrigger, row.active {
-                                        Text("\(model.parameterEventCount(spec.id))회").monospacedDigit()
-                                    } else {Text(live.map {String(format:"%.2f",$0)} ?? "—").monospacedDigit()}
+                                Text(row.address).font(.system(size:11,design:.monospaced)).fixedSize(horizontal:false,vertical:true)
+                                if row.globalID == nil {
+                                    Text(connectionLabel(row)).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
                                 }
-                                Text(row.active ? (row.globalID == nil ? "현재 씬" : "항상 활성") : "비활성").font(.caption).foregroundStyle(.secondary)
-                            }.frame(width:125,alignment:.trailing)
-                        }.padding(9).frame(height:53)
+                            }.frame(width:300,alignment:.leading)
+                            VStack(alignment:.leading,spacing:4) {
+                                Text(row.title)
+                                if row.globalID == nil {Text(row.scope).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)}
+                            }.frame(maxWidth:.infinity,alignment:.leading)
+                            VStack(alignment:.leading,spacing:3) {
+                                if row.globalID == nil {Text(row.inputRangeLabel).foregroundStyle(.secondary)}
+                                Text(row.conditionLabel).foregroundStyle(.primary)
+                                if let output=row.outputRangeLabel {Text(output).foregroundStyle(.secondary)}
+                            }.font(.system(size:11)).monospacedDigit()
+                                .fixedSize(horizontal:false,vertical:true).frame(width:250,alignment:.leading)
+                                .accessibilityElement(children:.combine).accessibilityIdentifier("mappingValues_"+row.id)
+                            VStack(alignment:.trailing,spacing:4) {
+                                MappingLiveStatus(model:model,row:row)
+                                if row.globalID == nil || !row.active {Text(row.active ? "현재 씬" : "비활성").font(.caption).foregroundStyle(.secondary)}
+                            }.frame(width:85,alignment:.trailing)
+                        }.padding(.horizontal,9).padding(.vertical,row.globalID == nil ? 8 : 6)
+                            .frame(minHeight:row.globalID == nil ? 66 : 30)
                             .background(selectedID == row.id ? orbitAccent.opacity(0.12) : Color.white.opacity(0.035),in:RoundedRectangle(cornerRadius:6))
                             .contentShape(Rectangle())
-                    }.buttonStyle(.plain).accessibilityIdentifier("mapping_"+row.id)
+                    }.buttonStyle(.plain).id(row.id).accessibilityIdentifier("mapping_"+row.id)
                 }
-                if visible.isEmpty { Text("등록된 매핑이 없습니다. 파라미터 옆 연결 버튼에서 추가하세요.").foregroundStyle(.secondary).padding() }
-                Spacer(minLength:0)
-            }.frame(height:281,alignment:.top)
-            HStack {
-                Text("\(rows.count)개 매핑 · 현재 \(model.selectedScene?.name ?? "")").foregroundStyle(.secondary)
-                Spacer()
-                Button("이전") { page-=1 }.disabled(page==0)
-                Text("\(page+1) / \(max(1,(rows.count+pageSize-1)/pageSize))").monospacedDigit()
-                Button("다음") { page+=1 }.disabled((page+1)*pageSize>=rows.count)
+                if rows.isEmpty {Text("조건에 맞는 항목이 없습니다. 검색이나 필터를 변경하세요.").foregroundStyle(.secondary).padding()}
             }
+            }.accessibilityIdentifier("mappingList")
+                .onChange(of:scope) {_,_ in if let first=rows.first {proxy.scrollTo(first.id,anchor:.top)}}
+                .onChange(of:signalType) {_,_ in if let first=rows.first {proxy.scrollTo(first.id,anchor:.top)}}
+                .onChange(of:sceneFilter) {_,_ in if let first=rows.first {proxy.scrollTo(first.id,anchor:.top)}}
+            }.frame(maxHeight:.infinity)
             Divider()
-            if let row = selected {
-                if let id = row.globalID, let index = model.globalOSC.firstIndex(where: { $0.id == id }) {
-                    globalEditor(index:index)
-                } else { parameterEditor(row) }
-            } else { Text("매핑을 선택하면 아래에서 설정을 편집합니다.").foregroundStyle(.secondary) }
-            Spacer(minLength:0)
-        }.padding(20).frame(width:820,height:710).background(Color(white:0.07)).font(.system(size:12))
+            if let id=selected?.globalID,let index=model.globalOSC.firstIndex(where:{$0.id==id}) {
+                globalEditor(index:index)
+            } else {Text("항목을 누르면 해당 동작의 OSC 주소와 입출력을 설정합니다.").foregroundStyle(.secondary)}
+        }.padding(20).frame(width:min(1120,(NSScreen.main?.visibleFrame.width ?? 1200)-60),height:min(880,(NSScreen.main?.visibleFrame.height ?? 960)-60)).background(Color(white:0.07)).font(.system(size:12))
             .tint(orbitAccent).accentColor(orbitAccent)
             .buttonStyle(OrbitSecondaryButtonStyle())
             .textFieldStyle(.roundedBorder)
-            .onChange(of:scope) { _,_ in
-                if let index=rows.firstIndex(where: { $0.id == selectedID }) { page=index/pageSize }
-                else { page=0;selectedID=nil }
-            }
-            .onChange(of:signalType) {_,_ in page=0;selectedID=nil}
-            .onChange(of:sceneFilter) { _,_ in page=0;selectedID=nil }
-            .onChange(of:rows.count) { _,count in page=min(page,max(0,(count-1)/pageSize)) }
-            .sheet(item:$editingParameter) { spec in
-                ParameterRoutingPopover(model:model,key:spec.id,title:spec.title) { editingParameter=nil }
+            .onAppear {loadNetworkSettings()}
+            .onChange(of:scope) {_,_ in if selected == nil {selectedID=nil}}
+            .onChange(of:signalType) {_,_ in selectedID=nil}
+            .onChange(of:sourceFilter) {_,_ in selectedID=nil}
+            .onChange(of:search) {_,_ in selectedID=nil}
+            .onChange(of:sceneFilter) {_,_ in selectedID=nil}
+            .sheet(item:$editingParameter) { row in
+                if let spec=row.spec,let sceneID=row.sceneID {
+                    ParameterRoutingPopover(model:model,key:spec.id,title:spec.title,initialTab:spec.outputOnly ? 1 : 0,
+                        sceneID:sceneID,textured:row.textured) {editingParameter=nil}
+                }
             }
     }
 
     private func globalEditor(index: Int) -> some View {
-        let route = model.globalOSC[index]
+        let route=model.globalOSC[index]
+        let target=route.action == .scene ? (model.scenes.first {$0.id==route.sceneID}?.name ?? "연결된 씬 없음") : route.action.label
         return VStack(alignment:.leading,spacing:10) {
             HStack {
-                Toggle("활성",isOn:$model.globalOSC[index].enabled)
-                Picker("트리거 방식",selection:Binding(get:{route.triggerMode ?? .event},set:{model.globalOSC[index].triggerMode=$0})) {
-                    Text("수신마다 ≥ 0.5").tag(ParameterInputMode.event)
-                    Text("임계값 통과").tag(ParameterInputMode.threshold)
-                }.frame(width:230)
-                if route.triggerMode == .threshold {
-                    TextField("임계값",value:Binding(get:{route.threshold?.level ?? 0.5},set:{value in
-                        var t=route.threshold ?? .init();t.level=value;model.globalOSC[index].threshold=t.sanitized
-                    }),format:.number).frame(width:60)
-                }
+                Text(target).fontWeight(.medium)
+                Text("· 글로벌 트리거").foregroundStyle(.secondary)
                 Spacer()
-                Button("삭제",role:.destructive) { model.globalOSC.removeAll { $0.id == route.id };selectedID=nil }
-            }
-            HStack {
-                TextField("/orbit/cue",text:$model.globalOSC[index].address).accessibilityIdentifier("globalOSCAddress")
-                Stepper("인수 \(route.argument)",value:$model.globalOSC[index].argument,in:0...15).frame(width:120)
-            }
-            HStack {
-                Picker("동작",selection:$model.globalOSC[index].action) {
-                    ForEach(GlobalOSCAction.allCases) { Text($0.label).tag($0) }
-                }.frame(width:240)
-                if route.action == .scene {
-                    Picker("씬",selection:Binding(get:{route.sceneID ?? ""},set:{model.globalOSC[index].sceneID=$0})) {
-                        Text("선택").tag("");ForEach(model.scenes) { Text($0.name).tag($0.id) }
-                    }
-                }
-                Spacer()
+                Toggle("OSC 수신",isOn:$model.globalOSC[index].enabled).accessibilityIdentifier("globalOSCEnabled")
                 Text("실행 \(model.globalReceipts[route.id]?.triggerCount ?? 0)회").monospacedDigit()
+                Button("복사") {NSPasteboard.general.clearContents();NSPasteboard.general.setString(route.address,forType:.string)}
+                    .accessibilityIdentifier("copyGlobalOSCAddress")
             }
-            if !route.isValid { Text("/로 시작하는 OSC 주소를 공백 없이 입력하세요.").foregroundStyle(.orange) }
+            TextField("수신 OSC 주소",text:$model.globalOSC[index].address).font(.system(size:11,design:.monospaced)).accessibilityIdentifier("globalOSCAddress")
+            Text("\(route.argument+1)번째 OSC Float 0.0–1.0 · \(selected?.conditionLabel ?? "≥ 0.5 수신마다 1회")")
+                .font(.caption).foregroundStyle(.secondary)
+            if !route.isValid {Text("/로 시작하는 OSC 주소를 공백 없이 입력하세요.").foregroundStyle(.orange)}
         }
     }
 
-    private func parameterEditor(_ row: MappingRow) -> some View {
-        VStack(alignment:.leading,spacing:10) {
-            Text("\(row.scope) · \(row.title)").fontWeight(.medium)
-            if let route = row.route, let spec = row.spec, let sceneID = row.sceneID {
-                if spec.outputOnly {
-                    Text(spec.detail).font(.caption).foregroundStyle(.secondary)
-                    if sceneID == model.selectedSceneID {
-                        Button("출력 상세") { editingParameter=spec }
-                    }
-                } else if spec.isTrigger {
-                    Text("독립 트리거 · "+spec.detail).font(.caption).foregroundStyle(.secondary)
-                    HStack {
-                        Toggle("입력 활성",isOn:inputBinding(row,\.enabled,fallback:false))
-                        Spacer()
-                        if row.active {Button("이벤트 실행") {model.triggerParameter(spec.id)};Button("이벤트 입출력 설정") {editingParameter=spec}}
-                    }
+    private func connectionLabel(_ row: MappingRow) -> String {
+        guard let route=row.route else {return "→ 글로벌 이벤트"}
+        let input=row.spec?.outputOnly == true ? "출력 전용 · 자동 발생" : (route.input.receivesDirectOSC ? "직접 수신 켜짐" : "직접 수신 꺼짐")+(route.input.enabled ? " · 영상 값으로 자동 실행" : "")
+        if route.output.transport == .osc {return input+"\n출력: "+route.output.address+(route.output.enabled ? "" : " (꺼짐)")}
+        return input+" · "+route.output.endpointLabel+(route.output.enabled ? "" : " (출력 꺼짐)")
+    }
+
+}
+
+/// Read the latest packet on each tick, including packets whose value did not change.
+private struct MappingLiveStatus: View {
+    let model: OrbitModel
+    let row: MappingRow
+    private var receipt: OSCReceipt? {
+        if let id=row.globalID {return model.globalReceipts[id]}
+        guard row.active,let spec=row.spec,!spec.outputOnly else {return nil}
+        return model.latestOSCInput(for:[spec.id])
+    }
+    var body: some View {
+        TimelineView(.periodic(from:.now,by:0.05)) { context in
+            let received=receipt
+            HStack(spacing:4) {
+                if row.spec?.outputOnly != true {
+                    OSCReceiveLight(receipt:model.oscRunning ? received : nil,date:context.date,title:row.title)
+                }
+                if let spec=row.spec,spec.isTrigger,row.active {
+                    Text("\(model.parameterEventCount(spec.id))회").monospacedDigit()
                 } else {
-                HStack {
-                    Toggle("입력 활성",isOn:inputBinding(row,\.enabled,fallback:false))
-                    Picker("센서",selection:inputBinding(row,\.sensorID,fallback:nil)) {
-                        Text("선택 안 함").tag(Optional<UUID>.none)
-                        ForEach(model.sensors) { Text($0.name).tag(Optional($0.id)) }
-                    }
+                    let live=row.spec?.outputOnly == true && row.active ? row.spec.map {model.controlValue($0.id)} : received?.value
+                    Text(live.map {String(format:"%.2f",$0)} ?? "—").monospacedDigit()
                 }
-                HStack {
-                    Text("연속값 · 최소·최대")
-                    TextField("최소",value:normalizedInputBinding(row,\.minimum),format:.number.precision(.fractionLength(0...3))).frame(width:75)
-                    Text("…")
-                    TextField("최대",value:normalizedInputBinding(row,\.maximum),format:.number.precision(.fractionLength(0...3))).frame(width:75)
-                    if route.input.behavior == .continuous {
-                        Text("전환 초")
-                        TextField("초",value:inputBinding(row,\.smoothingSeconds,fallback:8),format:.number).frame(width:45)
-                    }
-                    Spacer()
-                    if sceneID == model.selectedSceneID && row.textured == model.usesTexture {
-                        Button("입력·출력 상세") { editingParameter=spec }
-                    }
-                }
-                }
-                Text("출력: "+(route.output.enabled ? route.output.endpointLabel : "꺼짐")).foregroundStyle(.secondary)
-                if !row.active { Text("이 씬의 설정만 편집합니다. 현재 재생 중인 영상은 유지됩니다.").foregroundStyle(.secondary) }
             }
+        }.accessibilityIdentifier("mappingActivity_"+row.id)
+    }
+}
+
+/// All local network interfaces are visible; never mistake loopback for a remote sender's target.
+private struct OSCLocalAddressView: View {
+    var body: some View {
+        TimelineView(.periodic(from:.now,by:3)) { _ in
+            let addresses=OSCNetworkAddress.current()
+            VStack(alignment:.leading,spacing:3) {
+                Text("이 Mac · 수신 IP").font(.caption).foregroundStyle(.secondary)
+                if let first=addresses.first {
+                    Menu {
+                        ForEach(addresses) {item in
+                            Button("\(item.interface) · \(item.address) 복사") {
+                                NSPasteboard.general.clearContents();NSPasteboard.general.setString(item.address,forType:.string)
+                            }
+                        }
+                        Text("송신 장치와 연결된 네트워크의 IP를 사용하세요.")
+                    } label: {
+                        Text(first.address+(addresses.count>1 ? " +\(addresses.count-1)" : "")).font(.system(size:12,design:.monospaced))
+                            .foregroundStyle(.white)
+                    }.menuStyle(.borderlessButton).accessibilityIdentifier("oscLocalIP")
+                        .help(addresses.map {"\($0.interface): \($0.address)"}.joined(separator:"\n"))
+                } else {
+                    Text("네트워크 IP 없음").font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("oscLocalIP")
+                }
+            }.frame(width:165,alignment:.leading)
         }
     }
-    private func normalizedInputBinding(_ row: MappingRow, _ path: WritableKeyPath<ParameterInputRoute,Double>) -> Binding<Double> {
-        let spec = row.spec ?? ParameterSpec.find("")
-        let raw = inputBinding(row,path,fallback:path == \.minimum ? spec.range.lowerBound : spec.range.upperBound)
-        return Binding(get:{spec.normalized(raw.wrappedValue)},set:{raw.wrappedValue=spec.rawValue(normalized:$0)})
-    }
-    private func inputBinding<T>(_ row: MappingRow, _ path: WritableKeyPath<ParameterInputRoute,T>, fallback: T) -> Binding<T> {
-        Binding(get: {
-            guard let scene=row.sceneID,let key=row.spec?.id else { return fallback }
-            return (row.textured ? model.settings[scene]?.textureParameterRoutes : model.settings[scene]?.parameterRoutes)?[key]?.input[keyPath:path] ?? fallback
-        },set: { value in
-            guard let scene=row.sceneID,let spec=row.spec,var settings=model.settings[scene] else { return }
-            var routes = (row.textured ? settings.textureParameterRoutes : settings.parameterRoutes) ?? [:]
-            var route=routes[spec.id] ?? ParameterRoute.defaults(scene:scene,parameter:spec.id,spec:spec)
-            route.input[keyPath:path]=value
-            if spec.isTrigger {
-                route.input.mode = route.input.sourceParameter != nil || route.input.behavior == .threshold ? .threshold : .event
-                route.input.minimum=0;route.output.mode = .event
-            } else {route.input.mode=nil;route.input.sourceParameter=nil;route.output.mode=nil}
-            route.input.minimum=spec.clamp(route.input.minimum);route.input.maximum=spec.clamp(route.input.maximum)
-            route.input.smoothingSeconds=route.input.smoothingSeconds.isFinite ? min(30,max(0,route.input.smoothingSeconds)) : 0
-            routes[spec.id]=route
-            if row.textured { settings.textureParameterRoutes=routes } else { settings.parameterRoutes=routes }
-            model.settings[scene]=settings
-        })
+}
+
+/// Shared by the overall map and each parameter's input panel.
+struct DirectOSCInputFields: View {
+    @ObservedObject var model: OrbitModel
+    let key: String
+    let sceneID: String
+    let textured: Bool
+    private var route: ParameterRoute {model.route(for:key,sceneID:sceneID,textured:textured)}
+    private var address: String {model.inputOSCAddress(key,sceneID:sceneID,textured:textured)}
+    private var issue: String? {model.inputOSCIssue(key,sceneID:sceneID,textured:textured)}
+    var body: some View {
+        VStack(alignment:.leading,spacing:5) {
+            HStack {
+                Toggle("OSC 수신",isOn:Binding(get:{route.input.receivesDirectOSC},set:{value in
+                    model.setRoute(key,sceneID:sceneID,textured:textured) {$0.input.directOSCEnabled=value}
+                })).accessibilityIdentifier("directOSCEnabled")
+                Spacer()
+                Button("기본 주소") {model.setRoute(key,sceneID:sceneID,textured:textured) {$0.input.directOSCAddress=nil;$0.input.directOSCArgument=nil}}
+                    .disabled(route.input.directOSCAddress == nil && route.input.directOSCArgument == nil).accessibilityIdentifier("resetInputOSCAddress")
+                Button("복사") {NSPasteboard.general.clearContents();NSPasteboard.general.setString(address,forType:.string)}
+                    .accessibilityIdentifier("copyInputOSCAddress")
+            }
+            TextField("수신 OSC 주소",text:Binding(get:{address},set:{value in
+                model.setRoute(key,sceneID:sceneID,textured:textured) {$0.input.directOSCAddress=value}
+            })).font(.system(size:11,design:.monospaced)).accessibilityIdentifier("directOSCAddress")
+            if let issue {Text(issue).font(.caption).foregroundStyle(.orange).fixedSize(horizontal:false,vertical:true)}
+            else {
+                Text(model.parameterSpec(key,sceneID:sceneID,textured:textured).isTrigger
+                     ? "이 씬 재생 중 · \(route.input.oscArgument+1)번째 Float ≥ 0.5 수신마다 1회"
+                     : "이 씬 재생 중 · \(route.input.oscArgument+1)번째 Float 0.0–1.0")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
+            }
+        }
     }
 }

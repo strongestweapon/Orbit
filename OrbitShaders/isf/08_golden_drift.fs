@@ -298,6 +298,14 @@ float orbitBandEdge(float v) {
 }
 
 // Still reference, bottom-right: luminous gold head, sparse particles, vanishing tail.
+OrbitParams orbitGoldenMotion(OrbitParams p) {
+    // The former defaults needed 256 seconds per orbit and barely moved the grains.
+    // Apply one local clock to both the light field and its presence mask (64 s/orbit).
+    // The host's pause, normalized speed control and saved values remain authoritative.
+    p.phaseTime *= 4.0;
+    return p;
+}
+
 vec3 orbitShade(vec2 uv, OrbitParams p) {
     float t = p.phaseTime * 0.25;
     float center = orbitLightCenter(p);
@@ -346,6 +354,7 @@ void main() {
     p.shape1 = particleSize;
     p.shape2 = sparkleStrength;
     p.shape3 = 1.0;
+    p = orbitGoldenMotion(p);
     vec2 pixel = vec2(isf_FragNormCoord.x, 1.0-isf_FragNormCoord.y) * RENDERSIZE;
     vec3 uv = orbitCoordinates(pixel, p);
     float presence = orbitPresence(uv.xy, p);

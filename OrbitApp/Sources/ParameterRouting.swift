@@ -42,6 +42,7 @@ struct ParameterSpec: Identifiable {
     var outputOnly = false
     var eventOutput = false
     var isTrigger = false
+    var supportsOutputMode: Bool { !isTrigger && id != PulseOrbitOutputs.trigger }
     static let all: [ParameterSpec] = [
         .init(id:"speed",title:"속도",range:0...3), .init(id:"brightness",title:"밝기"),
         .init(id:"energy",title:"에너지"), .init(id:"density",title:"밀도"),
@@ -75,7 +76,7 @@ enum PulseOrbitOutputs {
     static let strength = "crossingStrength"
     static let proximity = "proximity"
     static let specs: [ParameterSpec] = [
-        .init(id:trigger,title:"교차 발생",detail:"실제로 교차할 때마다 OSC 1.0을 한 번 보냅니다. 같은 값도 생략하지 않으며, 대기 중 0이나 하트비트를 보내지 않습니다. MIDI는 0→127로 재트리거합니다.",defaultCC:90,outputOnly:true,eventOutput:true),
+        .init(id:trigger,title:"교차 발생",detail:"실제로 교차할 때마다 OSC 1.0을 한 번 보냅니다. 같은 값도 생략하지 않으며, 대기 중 0이나 하트비트를 보내지 않습니다.",defaultCC:90,outputOnly:true,eventOutput:true),
         .init(id:angle,title:"교차 위치",detail:"교차할 때의 논리 링 위치입니다. 0/1은 12시, 0.25는 3시입니다. 영상 출력 방향 보정 전 좌표입니다.",defaultCC:91,outputOnly:true,eventOutput:true),
         .init(id:strength,title:"교차 강도",detail:"교차한 두 펄스의 실제 방출 강도 중 작은 값입니다. 교차할 때만 0–1 실수로 보냅니다.",defaultCC:92,outputOnly:true,eventOutput:true),
         .init(id:proximity,title:"현재 근접도",detail:"안팎 펄스 중 가장 강한 근접 연결입니다. 멀면 0, 같은 각도에서 밝게 만나면 1입니다. 연속 출력입니다.",defaultCC:93,outputOnly:true)
@@ -118,8 +119,42 @@ struct ParameterInputRoute: Codable, Equatable {
     var legacyTarget: Double?
     var lineLimit: Int?
     var event: ParameterEventSettings?
+    // Built-in scene addresses work without creating a sensor. Optional fields migrate old settings.
+    var directOSCEnabled: Bool?
+    var directOSCAddress: String?
+    var directOSCArgument: Int? // Preserve the argument used by a migrated address.
+    var oscArgument: Int {min(15,max(0,directOSCArgument ?? 0))}
+    var receivesDirectOSC: Bool {directOSCEnabled ?? true}
     var behavior: ParameterInputMode { mode ?? .continuous }
     var eventSettings: ParameterEventSettings { (event ?? .init()).sanitized }
+    func addressOnly(using legacySensors: [SensorInput]) -> Self {
+        var result=self
+        if sourceParameter == nil {
+            if enabled, let sensor=legacySensors.first(where:{$0.id==sensorID}),directOSCAddress == nil {
+                result.directOSCAddress=sensor.address
+                result.directOSCArgument=sensor.argument
+                result.directOSCEnabled=true
+            }
+            result.enabled=false
+        }
+        result.sensorID=nil
+        return result
+    }
+}
+
+enum SceneOSCAddress {
+    static func input(scene: String, parameter: String, textured: Bool = false) -> String {
+        let source=textured ? "/original" : ""
+        let tail=parameter.hasPrefix("trigger.")
+            ? "/events/"+String(parameter.dropFirst("trigger.".count))
+            : "/parameters/"+parameter
+        return "/orbit/scene/"+scene+source+tail
+    }
+    static func isValid(_ address: String) -> Bool {
+        address.hasPrefix("/") && address.utf8.count <= 1024 && address.count > 1
+            && !address.unicodeScalars.contains {CharacterSet.whitespacesAndNewlines.contains($0) || CharacterSet.controlCharacters.contains($0)}
+            && !address.contains(where:{"*?[]{}#,\\".contains($0)})
+    }
 }
 
 enum ParameterInputMode: String, Codable, CaseIterable, Identifiable {
@@ -130,10 +165,10 @@ enum ParameterInputMode: String, Codable, CaseIterable, Identifiable {
     }
 }
 enum ParameterOutputMode: String, Codable, CaseIterable, Identifiable {
-    case continuous, event, threshold
+    case continuous, trigger, event, threshold
     var id: String { rawValue }
     var label: String {
-        switch self { case .continuous:return "연속값";case .event:return "영상 이벤트마다";case .threshold:return "영상 값 임계 통과" }
+        switch self { case .continuous:return "연속값";case .trigger:return "트리거";case .event:return "영상 이벤트마다";case .threshold:return "영상 값 임계 통과" }
     }
 }
 struct EventThreshold: Codable, Equatable {
@@ -308,57 +343,84 @@ struct SceneTrigger: Identifiable {
     }
 }
 
-enum ControlTransport: String, Codable, CaseIterable, Identifiable {
+// MIDI is retained only to decode and migrate settings from older installations.
+enum ControlTransport: String, Codable {
     case midi, osc
-    var id: String { rawValue }
-    var label: String { self == .midi ? "Ableton · MIDI CC" : "OSC · UDP" }
+}
+
+/// One network destination for every OSC message; addresses remain per control.
+struct OSCOutputDestination: Codable, Equatable {
+    var host = "127.0.0.1"
+    var port = 9001
+    var normalized: Self {.init(host:host.trimmingCharacters(in:.whitespacesAndNewlines),port:port)}
+    var label: String {host.contains(":") ? "[\(host)]:\(port)" : "\(host):\(port)"}
+    var validationError: String? {
+        guard !normalized.host.isEmpty,
+              !normalized.host.unicodeScalars.contains(where:{CharacterSet.whitespacesAndNewlines.contains($0) || CharacterSet.controlCharacters.contains($0)}),
+              !normalized.host.contains("/"), !normalized.host.contains("\\") else {return "출력 대상 IP 또는 호스트 이름을 입력하세요. URL은 사용할 수 없습니다."}
+        guard (1...65535).contains(port) else {return "출력 UDP 포트는 1–65535 범위입니다."}
+        return nil
+    }
+    func applying(to output: ParameterOutputRoute) -> ParameterOutputRoute {
+        var result=output.oscOnly();result.host=normalized.host;result.port=port;return result
+    }
+    /// Caller orders the current scene first. Prefer enabled legacy OSC routes, then configured ones.
+    static func migrated(from outputs: [ParameterOutputRoute]) -> Self {
+        let candidates=outputs.filter {$0.transport == .osc && Self(host:$0.host,port:$0.port).validationError == nil}
+        let selected=candidates.first {$0.enabled} ?? candidates.first {$0.configured == true || $0.host != "127.0.0.1" || $0.port != 9001}
+        return selected.map {Self(host:$0.host,port:$0.port).normalized} ?? .init()
+    }
 }
 
 struct ParameterOutputRoute: Codable, Equatable {
     var enabled = false
     // Optional fields keep settings saved before the connection list decodable.
-    var targetName: String?
+    var targetName: String? // Legacy setting only; output labels now use their actual destination.
     var configured: Bool?
-    var transport: ControlTransport = .midi
+    var transport: ControlTransport = .osc
+    // Legacy serialized fields; never used to transmit.
     var channel = 1
     var controller = 20
+    // Kept for decoding older installations and transport emissions. OrbitModel applies the shared destination.
     var host = "127.0.0.1"
     var port = 9001
     var address = "/orbit/value"
     var minimum: Double = 0
-    var maximum: Double = 127
+    var maximum: Double = 1
     var mode: ParameterOutputMode?
     var threshold: EventThreshold?
     var behavior: ParameterOutputMode { mode ?? .continuous }
     func sendsEvents(spec: ParameterSpec) -> Bool { spec.eventOutput || behavior != .continuous }
+    func sendsTriggerValue(spec: ParameterSpec) -> Bool { spec.isTrigger || spec.id == PulseOrbitOutputs.trigger || behavior == .trigger }
     var endpointLabel: String {
-        transport == .midi ? "MIDI · CH \(channel) / CC \(controller)" : "\(host):\(port)\(address)"
+        "\(host):\(port)\(address)"
     }
     var displayName: String {
-        let label = targetName?.trimmingCharacters(in:.whitespacesAndNewlines) ?? ""
-        return label.isEmpty ? (transport == .midi ? "Live · CC \(controller)" : address) : label
+        address
     }
     func isListed(defaultRoute: ParameterOutputRoute) -> Bool {
         enabled || configured == true || self != defaultRoute
     }
     var destinationKey: String {
-        transport == .midi ? "midi:\(channel):\(controller)" : "osc:\(host.trimmingCharacters(in:.whitespaces)):\(port):\(address)"
+        "osc:\(host.trimmingCharacters(in:.whitespaces)):\(port):\(address)"
+    }
+    func oscOnly() -> Self {
+        guard transport == .midi else {return self}
+        var result=self;result.transport = .osc
+        result.minimum=min(1,max(0,minimum/127));result.maximum=min(1,max(0,maximum/127))
+        return result
     }
     var validationError: String? {
+        guard transport == .osc else {return "이전 MIDI 설정을 OSC로 변환해야 합니다."}
         guard minimum.isFinite, maximum.isFinite else { return "송신 범위에 유효한 숫자를 입력하세요." }
-        if transport == .midi {
-            guard (1...16).contains(channel), (0...119).contains(controller) else { return "채널 1–16, CC 0–119를 사용하세요." }
-            guard (0...127).contains(minimum), (0...127).contains(maximum) else { return "MIDI 값은 0–127 범위입니다." }
-        } else {
-            guard !host.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty,
-                  !host.contains(where: { $0.isWhitespace }), (1...65535).contains(port) else { return "대상 IP/호스트와 UDP 포트를 확인하세요." }
-            guard address.hasPrefix("/"), address.utf8.count <= 1024,
-                  !address.unicodeScalars.contains(where: { CharacterSet.whitespacesAndNewlines.contains($0) || CharacterSet.controlCharacters.contains($0) }) else {
-                return "OSC 주소는 /로 시작하고 공백 없이 입력하세요."
-            }
-            guard abs(minimum) <= Double(Float.greatestFiniteMagnitude), abs(maximum) <= Double(Float.greatestFiniteMagnitude) else {
-                return "OSC float 범위를 벗어났습니다."
-            }
+        guard !host.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty,
+              !host.contains(where: { $0.isWhitespace }), (1...65535).contains(port) else { return "대상 IP/호스트와 UDP 포트를 확인하세요." }
+        guard address.hasPrefix("/"), address.utf8.count <= 1024,
+              !address.unicodeScalars.contains(where: { CharacterSet.whitespacesAndNewlines.contains($0) || CharacterSet.controlCharacters.contains($0) }) else {
+            return "OSC 주소는 /로 시작하고 공백 없이 입력하세요."
+        }
+        guard abs(minimum) <= Double(Float.greatestFiniteMagnitude), abs(maximum) <= Double(Float.greatestFiniteMagnitude) else {
+            return "OSC float 범위를 벗어났습니다."
         }
         return nil
     }
@@ -366,7 +428,7 @@ struct ParameterOutputRoute: Codable, Equatable {
         guard validationError == nil, value.isFinite else { return nil }
         let n = spec.normalized(value)
         let result = minimum + n*(maximum-minimum)
-        return transport == .midi ? result.rounded() : result
+        return result
     }
 }
 
@@ -406,7 +468,9 @@ struct SceneSettings: Codable {
         for key in Array(routes.keys) where !key.hasPrefix("trigger.") {
             guard var old=routes[key],let spec=specs.first(where:{$0.id==key}),!spec.outputOnly else {continue}
             let inputEvent=old.input.behavior != .continuous
-            let outputEvent=old.output.behavior != .continuous
+            // Only legacy envelope/threshold routes move to separate event controls.
+            // A packet-trigger output belongs to its original continuous parameter.
+            let outputEvent=old.output.behavior == .event || old.output.behavior == .threshold
             guard inputEvent || outputEvent else {continue}
             let id="trigger.parameter."+key
             var event=ParameterRoute.defaults(scene:scene,parameter:id)
@@ -434,6 +498,18 @@ struct SceneSettings: Codable {
         if parameterRoutes == nil { parameterRoutes = migrate(mapping,scene:scene) }
         if textureParameterRoutes == nil { textureParameterRoutes = migrate(textureMapping,scene:scene) }
     }
+    mutating func migrateOSCOutputs() {
+        func convert(_ routes: [String:ParameterRoute]?) -> [String:ParameterRoute]? {
+            routes?.mapValues {old in var route=old;route.output=old.output.oscOnly();return route}
+        }
+        parameterRoutes=convert(parameterRoutes);textureParameterRoutes=convert(textureParameterRoutes)
+    }
+    mutating func migrateOSCInputs(using legacySensors: [SensorInput]) {
+        func convert(_ routes: [String:ParameterRoute]?) -> [String:ParameterRoute]? {
+            routes?.mapValues {old in var route=old;route.input=old.input.addressOnly(using:legacySensors);return route}
+        }
+        parameterRoutes=convert(parameterRoutes);textureParameterRoutes=convert(textureParameterRoutes)
+    }
     mutating func migrateShaderParameters(_ parameters: [ShaderParameter]) {
         // Preserve explicit new values and endpoints. Texture playback keeps its own controls.
         for parameter in parameters {
@@ -459,11 +535,21 @@ struct ParameterResolver {
     private var smoothed: [String:Double] = [:]
     mutating func reset() { smoothed.removeAll() }
     mutating func resolve(base: [String:Double], routes: [String:ParameterRoute], sensors: [SensorInput],
-                          now: Date, delta: Double, specs: [ParameterSpec] = ParameterSpec.all) -> [String:Double] {
+                          now: Date, delta: Double, specs: [ParameterSpec] = ParameterSpec.all,
+                          directInputs: [String:OSCReceipt] = [:]) -> [String:Double] {
         var result = base
         for spec in specs {
             guard let rawBase = base[spec.id] else { continue }
             let fallback = spec.clamp(rawBase)
+            let sensorRoute=routes[spec.id]?.input
+            let sensor=sensors.first {$0.id == sensorRoute?.sensorID}
+            // Explicit direct commands win until a newer mapped sensor packet arrives.
+            if let direct=directInputs[spec.id],sensorRoute?.receivesDirectOSC != false,
+               sensorRoute?.enabled != true || sensor?.receivedAt == nil || direct.receivedAt >= sensor!.receivedAt! {
+                result[spec.id]=spec.rawValue(normalized:direct.value)
+                smoothed.removeValue(forKey:spec.id)
+                continue
+            }
             guard let route = routes[spec.id]?.input, route.enabled, route.behavior == .continuous else {
                 result[spec.id] = fallback; smoothed.removeValue(forKey:spec.id); continue
             }

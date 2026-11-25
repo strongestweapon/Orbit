@@ -30,6 +30,7 @@ struct StoredSettings: Codable {
     var customOutputWidth: Int?
     var installation: InstallationSettings?
     var globalOSC: [GlobalOSCMapping]?
+    var oscOutputDestination: OSCOutputDestination?
 }
 struct OutputDisplay: Identifiable {
     let id: UInt32
@@ -45,14 +46,16 @@ final class OrbitModel: ObservableObject {
         didSet { comparison.stop(); textureSource?.reset(); textureStatus = "텍스처 준비 중"; restartPlayback(); resetParameterState(); scheduleSave() }
     }
     @Published var settings: [String: SceneSettings] = [:]
-    @Published var sensors = [
-        SensorInput(name: "레이싱 속도", address: "/park/racing/speed"),
-        SensorInput(name: "관람객 수", address: "/park/visitors")
-    ]
+    // Decode old installation files only; live inputs are addressed directly.
+    @Published var sensors: [SensorInput] = []
     @Published var port = "9000" { didSet { scheduleSave() } }
+    @Published private(set) var oscOutputDestination = OSCOutputDestination()
     @Published var oscState = "수신 꺼짐"
     @Published var oscRunning = false
-    @Published var lastMessage = "OSC 데이터 대기"
+    // The compact status bar samples traffic without relaying every packet to the entire UI.
+    private(set) var lastMessage = "OSC 데이터 대기"
+    private(set) var lastOSCReceivedAt: Date?
+    private(set) var lastControlDelivery: ControlDelivery?
     @Published var playing = true { didSet { lastTime = CACurrentMediaTime(); scheduleSave() } }
     @Published var frameRate: PlaybackFrameRate = .sixty { didSet { scheduleSave() } }
     @Published var previewPolicy: PreviewPolicy = .always {
@@ -61,6 +64,12 @@ final class OrbitModel: ObservableObject {
     @Published var resumeOnLaunch = true { didSet { scheduleSave() } }
     @Published var globalOSC: [GlobalOSCMapping] = [] { didSet { scheduleSave() } }
     @Published private(set) var globalReceipts: [UUID:OSCReceipt] = [:]
+    private(set) var directOSCReceipts: [String:OSCReceipt] = [:]
+    private var sampledOutputValues: [String:Double] = [:]
+    func latestOSCInput(for keys: [String]) -> OSCReceipt? {
+        guard oscRunning,!isShuttingDown else {return nil}
+        return keys.compactMap {directOSCReceipts[$0]}.max {$0.receivedAt < $1.receivedAt}
+    }
     @Published var showReference = false {
         didSet { if showReference { restartPlayback() } else { comparison.stop() } }
     }
@@ -86,16 +95,18 @@ final class OrbitModel: ObservableObject {
     @Published var outputStatus = "출력 꺼짐"
     @Published var textureStatus = "텍스처 준비 중"
     @Published private(set) var parameterValues: [String:Double] = [:]
+    // Internal engine lifecycle only. The operator enables each output on its own route.
     @Published var controlOutputEnabled = false {
         didSet {
             if updateInstallationInProgress && controlOutputEnabled { controlOutputEnabled = false }
-            controlOutput.reset(); controlOutputStatus = controlOutputEnabled ? "제어 송신 대기" : "제어 자동 송신 꺼짐"
+            sampledOutputValues.removeAll()
+            controlOutput.reset(); controlOutputStatus = controlOutputEnabled ? "OSC 송신 준비" : "OSC 송신 정지"
             scheduleSave()
         }
     }
     var updateInstallationInProgress = false
-    @Published var controlOutputStatus = "제어 자동 송신 꺼짐"
-    // Connection cards poll receipts independently; a network packet must not relayout Metal views.
+    @Published var controlOutputStatus = "OSC 송신 준비 중"
+    // Status views poll receipts independently; a network packet must not relayout Metal views.
     private(set) var controlDeliveries: [String:ControlDelivery] = [:]
     let receiver = OSCReceiver()
     let telemetry = PlaybackTelemetry()
@@ -141,7 +152,11 @@ final class OrbitModel: ObservableObject {
     var usesTexture: Bool { selectedScene?.texture != nil && (activeSettings.useTexture ?? false) }
     var renderStyle: Int { usesTexture ? 1 : 0 }
     var activeRoutes: [String:ParameterRoute] {
-        (usesTexture ? activeSettings.textureParameterRoutes : activeSettings.parameterRoutes) ?? [:]
+        ((usesTexture ? activeSettings.textureParameterRoutes : activeSettings.parameterRoutes) ?? [:]).mapValues(effectiveRoute)
+    }
+    func effectiveRoute(_ saved: ParameterRoute) -> ParameterRoute {
+        var result=saved;result.output=oscOutputDestination.applying(to:saved.output)
+        result.input=saved.input.addressOnly(using:sensors);return result
     }
     var shaderParameters: [ShaderParameter] { usesTexture ? [] : (selectedScene?.parameters ?? []) }
     var allShaderParameters: [ShaderParameter] { usesTexture ? [] : (selectedScene?.allParameters ?? []) }
@@ -169,14 +184,22 @@ final class OrbitModel: ObservableObject {
     }
     var parameterSpecs: [ParameterSpec] {specs(for:selectedSceneID,textured:usesTexture)}
     func parameterSpec(_ key: String) -> ParameterSpec { parameterSpecs.first { $0.id == key } ?? .find(key) }
+    func parameterSpec(_ key: String, sceneID: String, textured: Bool) -> ParameterSpec {
+        specs(for:sceneID,textured:textured).first { $0.id == key } ?? .find(key)
+    }
     var manualPlaybackSpeed: Float { usesTexture ? (activeSettings.values["texture.speed"] ?? 1) : activeSettings.speed }
     var playbackSpeed: Float { Float(parameterValues["speed"] ?? Double(manualPlaybackSpeed)) }
-    var activeControlOutputCount: Int { activeRoutes.values.filter { $0.output.enabled }.count }
+    var activeControlOutputCount: Int {
+        guard selectedScene?.testScene == false else {return 0}
+        return parameterSpecs.filter {route(for:$0.id).output.enabled}.count
+    }
+    var hasActiveControlOutput: Bool {controlOutputEnabled && activeControlOutputCount > 0}
+    var blocksUpdateInstallation: Bool {outputOpen || hasActiveControlOutput || performance.isRunning}
     var outputParameterSpecs: [ParameterSpec] {
         guard selectedScene?.testScene == false else { return [] }
         return parameterSpecs.filter { spec in
             guard let route = activeRoutes[spec.id]?.output else { return false }
-            return route.isListed(defaultRoute:ParameterRoute.defaults(scene:selectedSceneID,parameter:spec.id,spec:spec).output)
+            return route.isListed(defaultRoute:oscOutputDestination.applying(to:ParameterRoute.defaults(scene:selectedSceneID,parameter:spec.id,spec:spec).output))
         }
     }
     func controlEmissionID(_ key: String) -> String { "\(selectedSceneID):\(renderStyle):\(key)" }
@@ -186,9 +209,12 @@ final class OrbitModel: ObservableObject {
         return delivery
     }
     func clearControlOutput(_ key: String) {
-        let original = ParameterRoute.defaults(scene:selectedSceneID,parameter:key,spec:parameterSpec(key)).output
-        controlDeliveries.removeValue(forKey:controlEmissionID(key))
-        setRoute(key) { $0.output = original }
+        clearControlOutput(key,sceneID:selectedSceneID,textured:usesTexture)
+    }
+    func clearControlOutput(_ key: String, sceneID: String, textured: Bool) {
+        let original = ParameterRoute.defaults(scene:sceneID,parameter:key,spec:parameterSpec(key,sceneID:sceneID,textured:textured)).output
+        controlDeliveries.removeValue(forKey:"\(sceneID):\(textured ? 1 : 0):\(key)")
+        setRoute(key,sceneID:sceneID,textured:textured) { $0.output = original }
     }
     private let textureDefaults: [String: Float] = ["density":0.5,"turbulence":0,"energy":0,
         "hueShift":0,"brightness":1,"coverage":1,"gapSoftness":0.8,"gapMotion":0.25,"fragmentation":0,"rotation":0,
@@ -229,6 +255,9 @@ final class OrbitModel: ObservableObject {
                    GlobalOSCMapping(address:"/orbit/pause",action:.pause)]
             if let data = defaults.data(forKey: "OrbitSettings.v1"),
                let stored = try? JSONDecoder().decode(StoredSettings.self, from: data) {
+                if !stored.sensors.isEmpty,defaults.data(forKey:"OrbitSettings.beforeAddressOnly.v1") == nil {
+                    defaults.set(data,forKey:"OrbitSettings.beforeAddressOnly.v1")
+                }
                 sensors = stored.sensors.map { var s = $0; s.receivedAt = nil; s.value = nil; s.minimum = 0; s.maximum = 1; return s }
                 for (key, storedValue) in stored.scenes where settings[key] != nil {
                     var value = storedValue
@@ -264,12 +293,13 @@ final class OrbitModel: ObservableObject {
                 port = stored.port
                 outputResolution = stored.outputResolution ?? .automatic
                 customOutputWidth = OutputGeometry.normalizedWidth(stored.customOutputWidth ?? 1920)
-                globalOSC = stored.globalOSC ?? globalOSC
-                // Add new scene cues without replacing edited or disabled existing routes.
-                if stored.globalOSC != nil {
-                    for scene in scenes where stored.scenes[scene.id] == nil && !globalOSC.contains(where: { $0.sceneID == scene.id }) {
-                        globalOSC.append(GlobalOSCMapping(address:"/orbit/scene/"+scene.id,action:.scene,sceneID:scene.id))
-                    }
+                let builtinGlobalRoutes=globalOSC
+                globalOSC = stored.globalOSC ?? builtinGlobalRoutes
+                // The catalog follows actual app actions. Preserve custom addresses and old aliases.
+                for builtin in builtinGlobalRoutes where !globalOSC.contains(where: {
+                    $0.action == builtin.action && (builtin.action != .scene || $0.sceneID == builtin.sceneID)
+                }) {
+                    globalOSC.append(builtin)
                 }
                 startupSession = stored.installation
                 preferredDisplayUUID = stored.installation?.displayUUID
@@ -278,14 +308,24 @@ final class OrbitModel: ObservableObject {
                 previewPolicy = stored.installation?.previewPolicy ?? .always
                 playing = stored.installation?.playing ?? true
                 resumeOnLaunch = stored.installation?.resumeOnLaunch ?? true
+                let orderedIDs=[selectedSceneID]+settings.keys.sorted().filter {$0 != selectedSceneID}
+                let legacyOutputs=orderedIDs.flatMap {id -> [ParameterOutputRoute] in
+                    let scene=settings[id]
+                    let sources=scene?.useTexture == true ? [scene?.textureParameterRoutes,scene?.parameterRoutes] : [scene?.parameterRoutes,scene?.textureParameterRoutes]
+                    return sources.flatMap {routes in (routes ?? [:]).sorted {$0.key < $1.key}.map { $0.value.output }}
+                }
+                oscOutputDestination=stored.oscOutputDestination ?? .migrated(from:legacyOutputs)
             }
         } catch { errorMessage = error.localizedDescription }
         for scene in scenes {
             settings[scene.id]?.migrateRoutes(scene:scene.id)
+            settings[scene.id]?.migrateOSCOutputs()
             for textured in [false,true] {
                 settings[scene.id]?.separateTriggerRoutes(scene:scene.id,specs:continuousSpecs(scene:scene,textured:textured),textured:textured)
             }
+            settings[scene.id]?.migrateOSCInputs(using:sensors)
         }
+        sensors=[]
         textureSource?.onReady = { [weak self] in self?.textureStatus = "텍스처 재생 준비됨" }
         textureSource?.onError = { [weak self] message in
             self?.textureStatus = "텍스처 읽기 실패"; self?.errorMessage = message
@@ -321,9 +361,11 @@ final class OrbitModel: ObservableObject {
             }
         }
         controlOutput.onDelivery = { [weak self] delivery in
-            DispatchQueue.main.async { self?.controlDeliveries[delivery.id] = delivery }
+            DispatchQueue.main.async {
+                self?.controlDeliveries[delivery.id] = delivery
+                self?.lastControlDelivery = delivery
+            }
         }
-        controlOutput.prepare()
         refreshParameters(delta:0)
         let timer = Timer(timeInterval:1.0/30.0,repeats:true) { [weak self] _ in
             guard let self else { return }
@@ -349,15 +391,16 @@ final class OrbitModel: ObservableObject {
         let persistedSensors = sensors.map { sensor -> SensorInput in
             var s = sensor; s.value = nil; s.receivedAt = nil; return s
         }
-        let data = try? JSONEncoder().encode(StoredSettings(sensors: persistedSensors, scenes: settings, port: port, motionRevision: 2, rendererRevision: 3, outputResolution: outputResolution, customOutputWidth: customOutputWidth, installation:installation, globalOSC:globalOSC))
+        let data = try? JSONEncoder().encode(StoredSettings(sensors: persistedSensors, scenes: settings, port: port, motionRevision: 2, rendererRevision: 3, outputResolution: outputResolution, customOutputWidth: customOutputWidth, installation:installation, globalOSC:globalOSC,oscOutputDestination:oscOutputDestination))
         if let data { defaults.set(data, forKey: "OrbitSettings.v1") }
     }
     func restoreSessionOnce() {
-        guard !sessionRestored, !isShuttingDown else { return }; sessionRestored = true
+        guard !sessionRestored, !isShuttingDown, !updateInstallationInProgress else { return }; sessionRestored = true
+        // OSC is ready on every launch; per-route switches are the only user-facing gates.
+        startOSC()
+        controlOutputEnabled = true
         guard resumeOnLaunch, let session = startupSession else { return }
         startupSession = nil
-        if session.oscReceiving == true { startOSC() }
-        controlOutputEnabled = session.controlSending ?? false
         if session.outputOpen == true {
             startOutput()
             if session.outputFullscreen == true {
@@ -381,13 +424,30 @@ final class OrbitModel: ObservableObject {
     }
     func value(_ name: String) -> Float { Float(parameterValues[name] ?? Double(effectiveValues[name] ?? 0)) }
     func baseParameterValue(_ key: String) -> Double { key == "speed" ? Double(manualPlaybackSpeed) : Double(effectiveValues[key] ?? 0) }
+    func baseParameterValue(_ key: String, sceneID: String, textured: Bool) -> Double {
+        guard let scene=settings[sceneID] else {return 0}
+        if key == "speed" {return Double(textured ? scene.values["texture.speed"] ?? 1 : scene.speed)}
+        if textured, let fallback=textureDefaults[key] {return Double(scene.values["texture."+key] ?? fallback)}
+        return Double(scene.values[key] ?? 0)
+    }
     func normalizedParameterValue(_ key: String) -> Double {
         parameterSpec(key).normalized(controlValue(key))
     }
     func setNormalizedParameterValue(_ key: String, _ value: Double) {
-        guard !parameterSpec(key).outputOnly,!parameterSpec(key).isTrigger else { return }
-        let raw = Float(parameterSpec(key).rawValue(normalized:value))
-        if key == "speed" { setSpeed(raw) } else { setValue(key,raw) }
+        setNormalizedParameterValue(key,value,sceneID:selectedSceneID,textured:usesTexture)
+    }
+    func setNormalizedParameterValue(_ key: String, _ value: Double, sceneID: String, textured: Bool) {
+        let spec=parameterSpec(key,sceneID:sceneID,textured:textured)
+        guard !spec.outputOnly,!spec.isTrigger,var scene=settings[sceneID] else {return}
+        let previous=baseParameterValue(key,sceneID:sceneID,textured:textured)
+        let raw=Float(spec.rawValue(normalized:value))
+        if key == "speed" && !textured {scene.speed=raw}
+        else {scene.values[textured && (key == "speed" || textureDefaults[key] != nil) ? "texture."+key : key]=raw}
+        settings[sceneID]=scene
+        if sceneID == selectedSceneID && textured == usesTexture {
+            directOSCReceipts.removeValue(forKey:key);refreshParameters(delta:0)
+            if previous != Double(raw) {sendContinuousInputTriggers([key])}
+        }
     }
     /// Snapshot the live session before cleanup so reopening can restore it. Cleanup must not save an empty session.
     func shutdownForTermination() {
@@ -450,54 +510,103 @@ final class OrbitModel: ObservableObject {
         restartPlayback(); resetParameterState()
     }
     func route(for key: String) -> ParameterRoute {
-        activeRoutes[key] ?? ParameterRoute.defaults(scene:selectedSceneID,parameter:key,spec:parameterSpec(key))
+        route(for:key,sceneID:selectedSceneID,textured:usesTexture)
+    }
+    func route(for key: String, sceneID: String, textured: Bool) -> ParameterRoute {
+        let routes=textured ? settings[sceneID]?.textureParameterRoutes : settings[sceneID]?.parameterRoutes
+        return effectiveRoute(routes?[key] ?? ParameterRoute.defaults(scene:sceneID,parameter:key,spec:parameterSpec(key,sceneID:sceneID,textured:textured)))
+    }
+    func inputOSCAddress(_ key: String, sceneID: String, textured: Bool) -> String {
+        route(for:key,sceneID:sceneID,textured:textured).input.directOSCAddress
+            ?? SceneOSCAddress.input(scene:sceneID,parameter:key,textured:textured)
+    }
+    func inputOSCIssue(_ key: String, sceneID: String, textured: Bool) -> String? {
+        let address=inputOSCAddress(key,sceneID:sceneID,textured:textured)
+        guard SceneOSCAddress.isValid(address) else {return "공백·와일드카드 없이 /로 시작하는 OSC 주소를 입력하세요."}
+        if globalOSC.contains(where:{$0.enabled && $0.address == address}) {return "글로벌 동작과 주소가 겹칩니다. 다른 주소를 사용하세요."}
+        // One address may intentionally drive multiple controls in the active scene.
+        return nil
+    }
+    @discardableResult func setOSCOutputDestination(_ proposed: OSCOutputDestination) -> Bool {
+        let destination=proposed.normalized
+        guard destination.validationError == nil else {return false}
+        guard destination != oscOutputDestination else {return true}
+        oscOutputDestination=destination
+        controlOutput.reset()
+        controlDeliveries=controlDeliveries.filter {!$0.value.destination.hasPrefix("osc:")}
+        controlOutputStatus="OSC 출력 대상 · "+destination.label
+        scheduleSave();refreshParameters(delta:0)
+        return true
+    }
+    @discardableResult func applyOSCNetworkSettings(receivePort: String, output: OSCOutputDestination) -> Bool {
+        guard let number=UInt16(receivePort.trimmingCharacters(in:.whitespacesAndNewlines)),number>0,output.validationError == nil else {return false}
+        let newPort=String(number),changed=newPort != port
+        if changed {stopOSC()}
+        if changed {port=newPort}
+        setOSCOutputDestination(output)
+        if !oscRunning {startOSC()}
+        save()
+        return true
     }
     func setRoute(_ key: String, _ update: (inout ParameterRoute) -> Void) {
-        var route = route(for:key); let prior = route; update(&route)
-        let spec = parameterSpec(key)
+        setRoute(key,sceneID:selectedSceneID,textured:usesTexture,update)
+    }
+    /// Overview edits share validation with the parameter buttons, without switching the live scene.
+    func setRoute(_ key: String, sceneID: String, textured: Bool, _ update: (inout ParameterRoute) -> Void) {
+        guard var scene=settings[sceneID] else {return}
+        let active=sceneID == selectedSceneID && textured == usesTexture
+        var route = route(for:key,sceneID:sceneID,textured:textured); let prior = route; update(&route)
+        route=effectiveRoute(route)
+        let spec = parameterSpec(key,sceneID:sceneID,textured:textured)
         if spec.outputOnly { route.input = ParameterInputRoute() }
         if spec.isTrigger {
             route.input.mode = route.input.sourceParameter != nil || route.input.behavior == .threshold ? .threshold : .event
             route.input.minimum=0;route.input.maximum=spec.clamp(route.input.maximum)
             route.output.mode = .event
         } else {
-            route.input.mode=nil;route.input.sourceParameter=nil;route.output.mode=nil
+            route.input.mode=nil;route.input.sourceParameter=nil
+            if !spec.supportsOutputMode || route.output.behavior != .trigger {route.output.mode=nil}
         }
         if spec.isTrigger || spec.id == PulseOrbitOutputs.trigger {
-            route.output.minimum = 0; route.output.maximum = route.output.transport == .midi ? 127 : 1
+            route.output.minimum = 0; route.output.maximum = 1
         }
         route.input.minimum = spec.clamp(route.input.minimum)
         route.input.maximum = spec.clamp(route.input.maximum)
         if key == SceneTrigger.addLineID {
             route.input.lineLimit=min(PulseOrbitSimulation.maximumLineCount,max(4,route.input.lineLimit ?? PulseOrbitSimulation.maximumLineCount))
-            if pulseOrbit.lineCount > route.input.lineLimit! {pulseOrbit.setLineCount(PulseOrbitSimulation.defaultLineCount);lastPulseCrossing=nil}
+            if active && pulseOrbit.lineCount > route.input.lineLimit! {pulseOrbit.setLineCount(PulseOrbitSimulation.defaultLineCount);lastPulseCrossing=nil}
         }
         if let event=route.input.event { route.input.event=event.sanitized }
         if let threshold=route.output.threshold { route.output.threshold=threshold.sanitized }
-        if prior.input != route.input { parameterEvents.clear(key) }
+        if active && prior.input != route.input { parameterEvents.clear(key);directOSCReceipts.removeValue(forKey:key) }
+        if active && prior.output != route.output {sampledOutputValues.removeValue(forKey:key)}
         route.input.smoothingSeconds = route.input.smoothingSeconds.isFinite ? min(30,max(0,route.input.smoothingSeconds)) : 8
         if !route.output.minimum.isFinite { route.output.minimum = prior.output.minimum }
         if !route.output.maximum.isFinite { route.output.maximum = prior.output.maximum }
-        var scene = activeSettings; var routes = activeRoutes; routes[key] = route
-        if usesTexture { scene.textureParameterRoutes = routes } else { scene.parameterRoutes = routes }
-        settings[selectedSceneID] = scene
-        refreshParameters(delta:0)
+        var routes=(textured ? scene.textureParameterRoutes : scene.parameterRoutes) ?? [:];routes[key]=route
+        if textured { scene.textureParameterRoutes = routes } else { scene.parameterRoutes = routes }
+        settings[sceneID] = scene
+        if active {refreshParameters(delta:0)}
     }
     func outputIssue(for key: String) -> String? {
-        let route = route(for:key).output
+        outputIssue(for:key,sceneID:selectedSceneID,textured:usesTexture)
+    }
+    func outputIssue(for key: String, sceneID: String, textured: Bool) -> String? {
+        let route = route(for:key,sceneID:sceneID,textured:textured).output
+        if route.transport == .osc,let issue=oscOutputDestination.validationError {return issue}
         if let issue = route.validationError { return issue }
-        if let other = activeRoutes.first(where: { $0.key != key && $0.value.output.enabled && $0.value.output.destinationKey == route.destinationKey }) {
-            return "\(parameterSpec(other.key).title)와 출력 주소가 겹칩니다. 채널·CC 또는 OSC 주소를 바꾸세요."
+        let routes=(textured ? settings[sceneID]?.textureParameterRoutes : settings[sceneID]?.parameterRoutes) ?? [:]
+        if let other = routes.first(where: { $0.key != key && $0.value.output.enabled && oscOutputDestination.applying(to:$0.value.output).destinationKey == route.destinationKey }) {
+            return "\(parameterSpec(other.key,sceneID:sceneID,textured:textured).title)와 출력 주소가 겹칩니다. OSC 주소를 바꾸세요."
         }
         return nil
     }
     func testControlOutput(_ key: String) {
         guard let spec = parameterSpecs.first(where: { $0.id == key }), outputIssue(for:key) == nil else { return }
-        // Isolate this parameter during Live's MIDI learn, even if other routes were transmitting.
-        controlOutputEnabled = false
+        // A one-shot test never changes the operator's automatic sending state.
         setRoute(key) { $0.output.configured = true }
         let route = route(for:key).output
-        if spec.isTrigger || (route.sendsEvents(spec:spec) && !spec.eventOutput) {
+        if route.sendsTriggerValue(spec:spec) || (route.sendsEvents(spec:spec) && !spec.eventOutput) {
             sendParameterEvent(key,test:true)
         } else if spec.eventOutput {
             controlOutput.sendEvents(pulseEventEmissions(for:[spec],values:[key:key == PulseOrbitOutputs.trigger ? 1 : controlValue(key)]),test:true)
@@ -506,13 +615,15 @@ final class OrbitModel: ObservableObject {
         }
     }
     private func resetParameterState() {
+        directOSCReceipts.removeAll()
+        sampledOutputValues.removeAll()
         parameterResolver.reset(); parameterEvents.reset(); controlOutput.reset(); lastControlTime = CACurrentMediaTime()
         refreshParameters(delta:0)
     }
     private func refreshParameters(delta: Double) {
         var base = effectiveValues.mapValues(Double.init); base["speed"] = Double(manualPlaybackSpeed)
         let routes = selectedScene?.testScene == false ? activeRoutes : [:]
-        var resolved = parameterResolver.resolve(base:base,routes:routes,sensors:sensors,now:Date(),delta:delta,specs:parameterSpecs)
+        var resolved = parameterResolver.resolve(base:base,routes:routes,sensors:[],now:Date(),delta:delta,specs:parameterSpecs,directInputs:directOSCReceipts)
         if usesTexture { resolved["markerWidth"] = (resolved["rotation"] ?? 0)*0.1 }
         if parameterValues != resolved { parameterValues = resolved }
         for event in sceneTriggers {
@@ -520,6 +631,7 @@ final class OrbitModel: ObservableObject {
             guard let source=input.sourceParameter,let spec=parameterSpecs.first(where:{$0.id==source && !$0.isTrigger && !$0.eventOutput}) else {continue}
             if parameterEvents.accepts(event.id,value:spec.normalized(controlValue(source)),route:input,fireFirst:false) {triggerParameter(event.id)}
         }
+        deliverContinuousSimulationTriggers()
         guard controlOutputEnabled else { return }
         let emissions = parameterSpecs.compactMap { spec -> ControlEmission? in
             guard let route = routes[spec.id]?.output, !route.sendsEvents(spec:spec), route.enabled, outputIssue(for:spec.id) == nil,
@@ -531,6 +643,29 @@ final class OrbitModel: ObservableObject {
             return route?.enabled == true && outputIssue(for:spec.id) == nil ? route : nil
         }
         controlOutput.send(emissions,retaining:eventRoutes)
+    }
+    /// A valid input packet is a new cue even when its Float repeats or is below 0.5.
+    /// Rendering and heartbeat ticks never enter this path.
+    private func sendContinuousInputTriggers(_ keys: [String]) {
+        guard controlOutputEnabled,!isShuttingDown else {return}
+        let emissions=keys.compactMap { key -> ControlEmission? in
+            let spec=parameterSpec(key),route=route(for:key).output
+            guard !spec.isTrigger,!spec.outputOnly,route.behavior == .trigger,route.enabled,outputIssue(for:key)==nil else {return nil}
+            return .init(id:controlEmissionID(key),route:route,value:1)
+        }
+        if !emissions.isEmpty {controlOutput.sendEvents(emissions)}
+    }
+    /// Output-only continuous simulation sources have no input packets. Emit on
+    /// changes between samples, with no cue for the initial value or a held value.
+    private func deliverContinuousSimulationTriggers() {
+        for spec in parameterSpecs where spec.outputOnly && !spec.eventOutput {
+            let value=Float(spec.normalized(controlValue(spec.id)))
+            guard value.isFinite else {continue}
+            let previous=sampledOutputValues.updateValue(Double(value),forKey:spec.id)
+            let route=route(for:spec.id).output
+            if controlOutputEnabled,!isShuttingDown,let previous,previous != Double(value),
+               route.enabled,route.behavior == .trigger {sendParameterEvent(spec.id)}
+        }
     }
     func setInputBehavior(_ key: String, _ mode: ParameterInputMode) {
         guard parameterSpec(key).isTrigger else {return}
@@ -557,20 +692,14 @@ final class OrbitModel: ObservableObject {
     private func sendParameterEvent(_ key: String, test: Bool = false) {
         guard outputIssue(for:key) == nil else { return }
         let route=route(for:key).output,id=controlEmissionID(key)
-        // OSC receivers consume a single float cue. MIDI Remote receives a fresh rising edge.
-        var events: [ControlEmission] = []
-        if route.transport == .midi { events.append(.init(id:id,route:route,value:0)) }
-        events.append(.init(id:id,route:route,value:route.transport == .midi ? 127 : 1))
-        controlOutput.sendEvents(events,test:test)
+        controlOutput.sendEvents([.init(id:id,route:route,value:1)],test:test)
     }
     private func pulseEventEmissions(for specs: [ParameterSpec], values: [String:Double]) -> [ControlEmission] {
         specs.flatMap { spec -> [ControlEmission] in
             let route = route(for:spec.id).output
-            guard outputIssue(for:spec.id) == nil, let raw = values[spec.id], let value = route.mappedValue(raw,spec:spec) else { return [] }
+            guard outputIssue(for:spec.id) == nil, let raw = values[spec.id], let mapped = route.mappedValue(raw,spec:spec) else { return [] }
+            let value=route.sendsTriggerValue(spec:spec) ? 1 : mapped
             let event = ControlEmission(id:controlEmissionID(spec.id),route:route,value:value)
-            if spec.id == PulseOrbitOutputs.trigger && route.transport == .midi {
-                return [ControlEmission(id:event.id,route:route,value:route.minimum),event]
-            }
             return [event]
         }
     }
@@ -585,9 +714,6 @@ final class OrbitModel: ObservableObject {
             let values = [PulseOrbitOutputs.trigger:1, PulseOrbitOutputs.angle:crossing.angle, PulseOrbitOutputs.strength:crossing.strength]
             controlOutput.sendEvents(pulseEventEmissions(for:specs,values:values))
         }
-    }
-    func addSensor() {
-        sensors.append(SensorInput(name: "센서 \(sensors.count + 1)", address: "/park/sensor/\(sensors.count + 1)"))
     }
     func startOSC() {
         guard !isShuttingDown else { return }
@@ -607,28 +733,37 @@ final class OrbitModel: ObservableObject {
         }
         receiver.start(port: number); save()
     }
-    func stopOSC() { globalThresholds.removeAll();globalThresholdRoutes.removeAll();parameterEvents.reset();oscSessionID=UUID();receiver.stop(); oscRunning = false; oscState = "수신 꺼짐"; scheduleSave() }
+    func stopOSC() { directOSCReceipts.removeAll();globalThresholds.removeAll();globalThresholdRoutes.removeAll();parameterEvents.reset();oscSessionID=UUID();receiver.stop(); oscRunning = false; oscState = "수신 꺼짐"; scheduleSave() }
 
     func receiveOSC(address: String, values: [Double]) {
         guard !isShuttingDown else { return }
+        let receivedAt=Date()
+        lastOSCReceivedAt = receivedAt
         lastMessage = address + "  " + values.map { OSCValue.normalized($0).map { String(format:"%.2f",$0) } ?? "실수 필요" }.joined(separator:", ")
-        var received: [(UUID,Double)] = []
-        for i in sensors.indices where sensors[i].address == address {
-            let argument = sensors[i].argument
-            if values.indices.contains(argument), let value = OSCValue.normalized(values[argument]) {
-                sensors[i].value = value; sensors[i].receivedAt = Date()
-                received.append((sensors[i].id,value))
-            }
-        }
-        // Process each packet immediately, never infer an event from a cached sensor value.
+        var receivedContinuous: [String] = []
+        // A packet's address and Float arguments are the complete external input contract.
         if selectedScene?.testScene == false {
-            for (sensorID,value) in received {
-                for spec in parameterSpecs where spec.isTrigger {
-                    let input=route(for:spec.id).input
-                    if input.sourceParameter == nil && input.sensorID == sensorID && parameterEvents.accepts(spec.id,value:value,route:input) { triggerParameter(spec.id) }
+            for spec in parameterSpecs where !spec.outputOnly {
+                let input=route(for:spec.id).input
+                guard input.receivesDirectOSC,inputOSCAddress(spec.id,sceneID:selectedSceneID,textured:usesTexture)==address,
+                      inputOSCIssue(spec.id,sceneID:selectedSceneID,textured:usesTexture)==nil,
+                      values.indices.contains(input.oscArgument),let value=OSCValue.normalized(values[input.oscArgument]) else {continue}
+                let previous=directOSCReceipts[spec.id]
+                directOSCReceipts[spec.id]=OSCReceipt(value:value,receivedAt:receivedAt,
+                    triggerCount:(previous?.triggerCount ?? 0)+(spec.isTrigger && value>=0.5 ? 1 : 0),
+                    packetCount:(previous?.packetCount ?? 0)+1)
+                if spec.isTrigger {
+                    if value>=0.5 {triggerParameter(spec.id)}
+                } else if var scene=settings[selectedSceneID] {
+                    let rawValue=Float(spec.rawValue(normalized:value))
+                    if spec.id=="speed" && !usesTexture {scene.speed=rawValue}
+                    else {scene.values[usesTexture && (spec.id=="speed" || textureDefaults[spec.id] != nil) ? "texture."+spec.id : spec.id]=rawValue}
+                    settings[selectedSceneID]=scene
+                    receivedContinuous.append(spec.id)
                 }
             }
             refreshParameters(delta:0)
+            sendContinuousInputTriggers(receivedContinuous)
         }
         // Iterate messages, not changed values: repeated high cues must restart again.
         for route in globalOSC where route.address == address && route.isValid {
@@ -639,7 +774,8 @@ final class OrbitModel: ObservableObject {
                 fires=globalThresholds[route.id,default:ThresholdLatch()].accept(value,settings:route.threshold ?? .init())
             } else { fires=route.accepts(address:address,values:values) }
             let count = globalReceipts[route.id]?.triggerCount ?? 0
-            globalReceipts[route.id] = OSCReceipt(value:value,receivedAt:Date(),triggerCount:count+(fires ? 1 : 0))
+            globalReceipts[route.id] = OSCReceipt(value:value,receivedAt:receivedAt,triggerCount:count+(fires ? 1 : 0),
+                packetCount:(globalReceipts[route.id]?.packetCount ?? 0)+1)
             if fires { performGlobalAction(route) }
         }
     }

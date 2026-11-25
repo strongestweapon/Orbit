@@ -16,7 +16,7 @@ final class PulseInbox {
     }
 }
 
-/// UDP sensor -> actual model -> UDP receiver. Isolated preferences and MIDI source.
+/// UDP sensor -> actual model -> UDP receiver. Isolated preferences and local UDP.
 @main struct PulseOSCChecks {
     static func pump(_ seconds: Double) { RunLoop.main.run(until:Date().addingTimeInterval(seconds)) }
     static func wait(_ message: String, _ predicate: () -> Bool) {
@@ -50,17 +50,18 @@ final class PulseInbox {
         let defaults=UserDefaults(suiteName:domain)!
         defer {defaults.removePersistentDomain(forName:domain)}
         let bundle=Bundle(path:CommandLine.arguments[1])!
-        let model=OrbitModel(defaults:defaults,resources:bundle,controlOutput:ControlOutput(portName:"Orbit Pulse Test "+UUID().uuidString))
+        let model=OrbitModel(defaults:defaults,resources:bundle,controlOutput:ControlOutput())
         defer {model.shutdownForTermination()}
+        model.setOSCOutputDestination(.init(host:"127.0.0.1",port:Int(inbox.snapshot().1!)))
         model.selectedSceneID=PulseOrbitSimulation.sceneID;model.playing=false
         let controls=model.shaderParameters
         precondition(controls.count==23)
-        model.sensors=controls.map { SensorInput(name:$0.title,address:"/qa/in/"+$0.id) }
-        for (index,control) in controls.enumerated() {
+        precondition(model.sensors.isEmpty)
+        for control in controls {
             model.setRoute(control.id) {
-                $0.input = .init(enabled:true,sensorID:model.sensors[index].id,minimum:0,maximum:1,smoothingSeconds:0)
+                $0.input.directOSCAddress="/qa/in/"+control.id
                 $0.output.enabled=true;$0.output.configured=true;$0.output.transport = .osc
-                $0.output.host="127.0.0.1";$0.output.port=Int(inbox.snapshot().1!)
+
                 $0.output.address="/qa/out/"+control.id;$0.output.minimum=0;$0.output.maximum=1
             }
         }
@@ -71,7 +72,7 @@ final class PulseInbox {
         source.start(queue:queue);defer {source.cancel()}
         let messages=controls.map { OSCEncoder.floatMessage(address:"/qa/in/"+$0.id,value:0.62)! }
         source.send(content:OSCEncoder.immediateBundle(messages),completion:.contentProcessed({_ in }))
-        wait("all 23 real sensor inputs") { controls.allSatisfy {abs(model.normalizedParameterValue($0.id)-($0.isSwitch == true ? 1:0.62))<0.00001} }
+        wait("all 23 direct OSC inputs") { controls.allSatisfy {abs(model.normalizedParameterValue($0.id)-($0.isSwitch == true ? 1:0.62))<0.00001} }
         wait("all 23 real output floats") {controls.allSatisfy {abs((inbox.latest("/qa/out/"+$0.id) ?? -1)-($0.isSwitch == true ? 1:0.62))<0.00001}}
         // Switches honor the 0.5 threshold without smoothing; reject integer/NaN input.
         for value in [Float(0.49),Float(0.5)] {
@@ -84,15 +85,15 @@ final class PulseInbox {
         precondition(abs(model.normalizedParameterValue("clustering")-0.62)<0.00001)
         // Retain custom input/output addresses across process-equivalent settings reload.
         model.save()
-        let restored=OrbitModel(defaults:defaults,resources:bundle,controlOutput:ControlOutput(portName:"Orbit Reload Test "+UUID().uuidString))
+        let restored=OrbitModel(defaults:defaults,resources:bundle,controlOutput:ControlOutput())
         defer {restored.shutdownForTermination()}
         restored.selectedSceneID=PulseOrbitSimulation.sceneID
         precondition(restored.route(for:"waveTravel").output.address=="/qa/out/waveTravel")
-        precondition(restored.route(for:"outerReverse").input.sensorID==model.route(for:"outerReverse").input.sensorID)
-        precondition(restored.sensors.allSatisfy {$0.value==nil})
+        precondition(restored.route(for:"outerReverse").input.directOSCAddress=="/qa/in/outerReverse")
+        precondition(restored.sensors.isEmpty)
 
-        // Disable sensor controls; exercise real crossings instead of synthetic output calls.
-        for control in controls {model.setRoute(control.id) {$0.input.enabled=false;$0.output.enabled=false}}
+        // Disable direct input; exercise real crossings instead of synthetic output calls.
+        for control in controls {model.setRoute(control.id) {$0.input.directOSCEnabled=false;$0.output.enabled=false}}
         model.resetSceneAppearance()
         model.setNormalizedParameterValue("attraction",0)
         model.setNormalizedParameterValue("directionDrive",1)
@@ -103,7 +104,7 @@ final class PulseInbox {
             precondition(model.route(for:spec.id).output.transport == .osc)
             model.setRoute(spec.id) {
                 $0.input.enabled=true // Must be rejected: simulation signals are output-only.
-                $0.output.enabled=true;$0.output.configured=true;$0.output.port=Int(inbox.snapshot().1!)
+                $0.output.enabled=true;$0.output.configured=true
                 $0.output.address="/qa/event/"+spec.id
             }
             precondition(!model.route(for:spec.id).input.enabled)
@@ -151,6 +152,32 @@ final class PulseInbox {
             wait("repeated scene trigger") {model.globalReceipts[cue.id]?.triggerCount==expected}
             precondition(model.pulseCrossingCount==0)
         }
-        print("PASS: 23 real UDP inputs -> normalized shader controls -> 23 UDP outputs, switches, integer rejection, persisted routes, output-only sources, bundled crossing events, no pause heartbeat/re-enable backlog, repeated scene cues")
+        // Numeric simulation outputs can also send unit cues without changing their addresses.
+        model.playing=false
+        for key in [PulseOrbitOutputs.angle,PulseOrbitOutputs.strength,PulseOrbitOutputs.proximity] {
+            let address=model.route(for:key).output.address
+            model.setRoute(key) {$0.output.mode = .trigger}
+            precondition(model.route(for:key).output.address==address && model.route(for:key).output.behavior == .trigger)
+        }
+        pump(0.1)
+        let earlier=inbox.snapshot().0.count
+        model.playing=true
+        let end=Date().addingTimeInterval(6)
+        while Date()<end && model.pulseCrossingCount<3 {
+            _=model.uniforms(width:1920,height:1080,view:1);pump(0.01)
+        }
+        model.playing=false;pump(0.1)
+        precondition(model.pulseCrossingCount>=3)
+        let newMessages=inbox.snapshot().0.dropFirst(earlier).flatMap {OSCDecoder.decode($0)}
+        for key in [PulseOrbitOutputs.angle,PulseOrbitOutputs.strength,PulseOrbitOutputs.proximity] {
+            let messages=newMessages.filter {$0.address==model.route(for:key).output.address}
+            precondition(!messages.isEmpty && messages.allSatisfy {$0.values==[1]},"Simulation cue payload: \(key)")
+        }
+        let settled=inbox.snapshot().0.count
+        pump(2.2);precondition(inbox.snapshot().0.count==settled,"Held simulation values must not repeat triggers")
+        model.testControlOutput(PulseOrbitOutputs.proximity)
+        wait("simulation trigger send test") {inbox.snapshot().0.count==settled+1}
+        precondition(inbox.latest(model.route(for:PulseOrbitOutputs.proximity).output.address)==1)
+        print("PASS: 23 real UDP inputs -> normalized shader controls -> 23 UDP outputs, switches, integer rejection, persisted routes, output-only sources, bundled crossing events, no pause heartbeat/re-enable backlog, repeated scene cues; all numeric simulation sources can emit unit triggers on their original addresses")
     }
 }
