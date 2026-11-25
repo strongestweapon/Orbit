@@ -204,8 +204,11 @@ final class OrbitModel: ObservableObject {
     }
     func controlEmissionID(_ key: String) -> String { "\(selectedSceneID):\(renderStyle):\(key)" }
     func controlDelivery(for key: String) -> ControlDelivery? {
-        guard let delivery = controlDeliveries[controlEmissionID(key)],
-              delivery.destination == route(for:key).output.destinationKey else { return nil }
+        controlDelivery(for:key,sceneID:selectedSceneID,textured:usesTexture)
+    }
+    func controlDelivery(for key: String, sceneID: String, textured: Bool) -> ControlDelivery? {
+        guard let delivery = controlDeliveries["\(sceneID):\(textured ? 1 : 0):\(key)"],
+              delivery.destination == route(for:key,sceneID:sceneID,textured:textured).output.destinationKey else { return nil }
         return delivery
     }
     func clearControlOutput(_ key: String) {

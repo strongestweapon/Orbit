@@ -73,9 +73,13 @@ final class SharedOSCInbox {
         wait("continuous output to common A") {abs((a.latest("/qa/continuous") ?? -1)-0.4)<0.0001}
         for _ in 0..<3 {model.receiveOSC(address:"/qa/event_in",values:[1])}
         wait("three repeated events to common A") {a.count("/qa/event")==3}
+        wait("overview reads actual send receipt") {model.controlDelivery(for:key,sceneID:scene,textured:false)?.value == 1}
+        precondition(model.controlDelivery(for:key,sceneID:scene,textured:true)==nil,"Original and generated send receipts must be separate")
+        precondition(model.controlDelivery(for:key,sceneID:"01_chroma_flow",textured:false)==nil,"Other scenes must not inherit the live send status")
         precondition(b.count("/qa/event")==0 && b.count("/qa/continuous")==0)
         let eventCount=model.parameterEventCount(key),lineCount=model.pulseLineCount
         precondition(model.setOSCOutputDestination(destinationB))
+        precondition(model.controlDelivery(for:key,sceneID:scene,textured:false)==nil,"Old destination receipts must not appear as current sends")
         wait("continuous output moved to B") {abs((b.latest("/qa/continuous") ?? -1)-0.4)<0.0001}
         pump(0.2)
         let oldContinuous=a.count("/qa/continuous"),oldEvents=a.count("/qa/event")

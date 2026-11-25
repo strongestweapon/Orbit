@@ -28,6 +28,14 @@ import AppKit
         precondition(!initial.contains {$0.sceneID==pulse && $0.textured},"Phantom texture controls")
         precondition(!initial.contains {$0.globalID == nil && $0.configured},"Defaults are not configured connections")
 
+        // A shared filter must retain both directions of a continuous-in/trigger-out route.
+        precondition(row(pulse,"inertia").matchesSignalType(1) && !row(pulse,"inertia").matchesSignalType(2))
+        model.setRoute("inertia") {$0.output.mode = .trigger}
+        precondition(row(pulse,"inertia").matchesSignalType(1) && row(pulse,"inertia").matchesSignalType(2))
+        precondition(!initial.first {$0.globalID != nil}!.matchesSignalType(1))
+        precondition(row(pulse,PulseOrbitOutputs.trigger).matchesSignalType(2) && !row(pulse,PulseOrbitOutputs.trigger).matchesSignalType(1))
+        model.setRoute("inertia") {$0.output.mode = .continuous}
+
         // The same route must update immediately from either entry point, with scene-specific defaults.
         model.setRoute(addLine) {$0.input.directOSCAddress="/qa/login"}
         precondition(row(pulse,addLine).configured && row(pulse,addLine).address=="/qa/login")
