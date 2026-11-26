@@ -24,9 +24,73 @@ import AppKit
         precondition(row(pulse,addLine).inputRangeLabel == "OSC Float 0.0–1.0")
         precondition(row(pulse,addLine).conditionLabel == "≥ 0.5 수신마다 1회")
         precondition(initial.first {$0.globalID != nil}!.conditionLabel == "≥ 0.5 수신마다 1회")
-        precondition(row(pulse,PulseOrbitOutputs.trigger).spec?.outputOnly == true)
+        precondition(!initial.contains {$0.sceneID==pulse && $0.spec?.outputOnly == true},"Internal telemetry is not an operator control")
         precondition(!initial.contains {$0.sceneID==pulse && $0.textured},"Phantom texture controls")
         precondition(!initial.contains {$0.globalID == nil && $0.configured},"Defaults are not configured connections")
+
+        // Scene controls must lead both panes, without mixing common controls or
+        // simulation telemetry into the five public Pulse Orbit parameters.
+        let pulseRows=initial.filter {$0.sceneID==pulse && !$0.textured}
+        precondition(pulseRows.filter {$0.group == .parameters}.count==5)
+        precondition(pulseRows.filter {$0.group == .triggers}.count==4)
+        precondition(pulseRows.filter {$0.group == .common}.count==8)
+        precondition(pulseRows.filter {$0.group == .simulation}.isEmpty)
+        precondition(!pulseRows.contains {$0.spec?.id=="gapMotion"},"Stationary mask has no gap-motion control")
+        precondition(row("01_chroma_flow","gapMotion").group == .common)
+        precondition(row("01_chroma_flow","gapMotion",true).group == .common)
+        let continuous=pulseRows.filter {$0.matchesSignalType(1)}
+        let inputs=MappingSection.sections(continuous,output:false)
+        let outputs=MappingSection.sections(continuous,output:true)
+        precondition(inputs.map(\.group)==[.parameters,.common])
+        precondition(outputs.map(\.group)==[.parameters,.common])
+        precondition(inputs[0].rows.map(\.id)==outputs[0].rows.map(\.id))
+        precondition(Set(inputs[0].rows.compactMap {$0.spec?.id})==["attraction","pulseDensity","directionDrive","inertia","attractorPosition"])
+        precondition(MappingSection.countSummary(inputs)=="씬 5 · 공통 8")
+        precondition(MappingSection.countSummary(outputs)=="씬 5 · 공통 8")
+        let events=pulseRows.filter {$0.matchesSignalType(2)}
+        precondition(MappingSection.sections(events,output:false).map(\.group)==[.triggers])
+        precondition(MappingSection.countSummary(MappingSection.sections(events,output:true))=="트리거 4")
+        for output in [false,true] {
+            let grouped=MappingSection.sections(initial,output:output).flatMap(\.rows).map(\.id)
+            let expected=initial.filter {output ? $0.globalID==nil : $0.spec?.outputOnly != true}.map(\.id)
+            precondition(grouped==expected,"Grouping must retain each eligible route exactly once")
+        }
+        for scene in model.scenes {
+            for textured in [false,true] {
+                let catalog=model.controls(for:scene.id,textured:textured)
+                let displayed=ControlPlacement.allCases.flatMap {catalog.at($0)}.filter(\.canMap)
+                let rows=initial.filter {$0.sceneID==scene.id && $0.textured==textured}
+                precondition(Set(displayed.map(\.id))==Set(rows.compactMap {$0.spec?.id}),"Overview must be exactly the displayed mapping controls")
+                precondition(catalog.specs.map(\.id)==catalog.routable.map(\.id),"Receiver uses the operator catalog")
+                for control in displayed {precondition(rows.first {$0.spec?.id==control.id}?.title==control.title)}
+            }
+        }
+        precondition(!initial.contains {$0.sceneID=="01_chroma_flow" && $0.spec?.id=="poolContrast"},"Unconnected compatibility uniforms stay private")
+        precondition(!initial.contains {$0.sceneID=="01_chroma_flow" && $0.textured && $0.spec?.id=="rotation"},"Video source has no image-rotation control")
+
+        // Changing one scene definition changes its visible controls and map together.
+        let originalScenes=model.scenes
+        let manifestURL=resources.resourceURL!.appendingPathComponent("config/scenes.json")
+        var manifest=try JSONSerialization.jsonObject(with:Data(contentsOf:manifestURL)) as! [String:Any]
+        var sceneData=manifest["scenes"] as! [[String:Any]]
+        let pulseIndex=sceneData.firstIndex {$0["id"] as? String==pulse}!
+        var parameters=sceneData[pulseIndex]["parameters"] as! [[String:Any]]
+        var added=parameters.removeFirst();added["id"]="qaAddedControl";added["title"]="정의 추가 검증"
+        parameters.append(added);sceneData[pulseIndex]["parameters"]=parameters;manifest["scenes"]=sceneData
+        model.scenes=try JSONDecoder().decode(SceneManifest.self,from:JSONSerialization.data(withJSONObject:manifest)).scenes
+        precondition(model.controlCatalog.at(.main).contains {$0.id=="qaAddedControl" && $0.title=="정의 추가 검증"})
+        precondition(row(pulse,"qaAddedControl").title=="정의 추가 검증")
+        precondition(!model.controlCatalog.routable.contains {$0.id=="attraction"})
+        precondition(!model.mappingRows.contains {$0.sceneID==pulse && $0.spec?.id=="attraction"})
+        model.scenes=originalScenes
+
+        model.setRoute("poolContrast",sceneID:"01_chroma_flow",textured:false) {$0.output.enabled=true}
+        let legacy=model.controls(for:"01_chroma_flow",textured:false).at(.compatibility)
+        precondition(legacy.contains {$0.id=="poolContrast"})
+        precondition(row("01_chroma_flow","poolContrast").group == .common)
+        model.clearControlOutput("poolContrast",sceneID:"01_chroma_flow",textured:false)
+        precondition(!model.controls(for:"01_chroma_flow",textured:false).routable.contains {$0.id=="poolContrast"})
+        precondition(!model.mappingRows.contains {$0.sceneID=="01_chroma_flow" && $0.spec?.id=="poolContrast"})
 
         // The shipped OSC reference must match the real catalog, addresses and defaults.
         let referenceURL=resources.resourceURL!.appendingPathComponent("config/osc-mappings.example.json")
@@ -37,6 +101,10 @@ import AppKit
         for item in documented {
             let scene=item["scene"] as! String,key=item["id"] as! String,textured=item["source"] as! String == "original"
             let actual=row(scene,key,textured)
+            let control=model.controls(for:scene,textured:textured).routable.first {$0.id==key}!
+            precondition(item["surface"] as? String==control.placement.rawValue)
+            let section:[MappingGroup:String]=[.parameters:"shader",.triggers:"event",.common:"common",.simulation:"simulationOutput"]
+            precondition(section[actual.group]==item["section"] as? String)
             precondition(actual.title==item["title"] as? String)
             precondition(actual.route!.output.address==item["outputAddress"] as? String)
             if actual.spec!.outputOnly {precondition(item["inputAddress"] is NSNull)}
@@ -51,7 +119,7 @@ import AppKit
         model.setRoute("inertia") {$0.output.mode = .trigger}
         precondition(row(pulse,"inertia").matchesSignalType(1) && row(pulse,"inertia").matchesSignalType(2))
         precondition(!initial.first {$0.globalID != nil}!.matchesSignalType(1))
-        precondition(row(pulse,PulseOrbitOutputs.trigger).matchesSignalType(2) && !row(pulse,PulseOrbitOutputs.trigger).matchesSignalType(1))
+        precondition(row(pulse,addLine).matchesSignalType(2) && !row(pulse,addLine).matchesSignalType(1))
         model.setRoute("inertia") {$0.output.mode = .continuous}
 
         // The same route must update immediately from either entry point, with scene-specific defaults.
@@ -125,6 +193,6 @@ import AppKit
         precondition(restored.route(for:otherEvent,sceneID:other,textured:false).output.address=="/qa/other")
         precondition(restored.route(for:"brightness",sceneID:other,textured:true).output.address=="/qa/texture")
         precondition(restored.mappingRows.contains {$0.sceneID==pulse && $0.spec?.id==addLine})
-        print("PASS: catalog completeness, live mapping updates, scene/source isolation, output validation and persisted mappings")
+        print("PASS: grouped input/output catalog, five scene controls, shared OSC reference, live edits, scene/source isolation and persistence")
     }
 }

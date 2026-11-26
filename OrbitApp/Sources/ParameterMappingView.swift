@@ -36,6 +36,35 @@ struct OSCReceiveLight: View {
     }
 }
 
+/// All operator parameter surfaces render the same definitions used by OSC.
+struct MappedSceneControl: View {
+    @ObservedObject var model: OrbitModel
+    let control: SceneControl
+    var body: some View {
+        if control.spec.isSwitch || control.shader?.group == 2 {
+            HStack(spacing:6) {
+                if control.shader?.group == 2 {
+                    Text(control.title)
+                    Picker(control.title,selection:Binding(
+                        get:{model.value(control.id) >= 0.5 ? 1 : 0},
+                        set:{model.setNormalizedParameterValue(control.id,Double($0))})) {
+                            Text("레드").tag(0);Text("화이트").tag(1)
+                        }.labelsHidden().pickerStyle(.segmented)
+                } else {
+                    Toggle(control.title,isOn:Binding(
+                        get:{model.value(control.id) >= 0.5},
+                        set:{model.setNormalizedParameterValue(control.id,$0 ? 1:0)}))
+                        .disabled(model.route(for:control.id).input.enabled && control.canMap)
+                        .accessibilityIdentifier("parameter_"+control.id)
+                }
+                ParameterRouteButton(model:model,key:control.id,title:control.title)
+            }.font(.system(size:12))
+        } else {
+            MappedParameterSlider(model:model,key:control.id,title:control.title)
+        }
+    }
+}
+
 struct MappedParameterSlider: View {
     @ObservedObject var model: OrbitModel
     let key: String
@@ -65,6 +94,8 @@ struct ParameterRouteButton: View {
     let title: String
     @State private var presented = false
     var body: some View {
+        if let control=model.controlCatalog.routable.first(where:{$0.id==key}) {
+        let title=control.title
         let route = model.route(for:key)
         let inputConfigured = route.input.enabled || (route.input.receivesDirectOSC && route.input.directOSCAddress != nil)
         let connected = inputConfigured || route.output.enabled
@@ -90,6 +121,7 @@ struct ParameterRouteButton: View {
                 ParameterOSCActivity(model:model,key:key,title:title)
             }
         }.fixedSize()
+        }
     }
 }
 

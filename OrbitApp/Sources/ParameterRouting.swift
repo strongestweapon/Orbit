@@ -33,7 +33,7 @@ struct SensorMapping: Codable, Equatable {
 
 struct ParameterSpec: Identifiable {
     let id: String
-    let title: String
+    var title: String
     var range: ClosedRange<Double> = 0...1
     var isSwitch = false
     var detail = ""
@@ -109,6 +109,94 @@ struct ShaderParameter: Decodable, Identifiable {
     let isSwitch: Bool?
     func spec(index: Int) -> ParameterSpec {
         ParameterSpec(id:id,title:title,range:minimum...maximum,isSwitch:isSwitch ?? false,detail:detail,unit:unit,defaultCC:midiCC ?? (40+index))
+    }
+}
+
+/// A control is routable because it is declared on an operator surface. Neither
+/// the OSC receiver, overview nor exporter adds engine uniforms or telemetry.
+enum ControlPlacement: String, CaseIterable {
+    case main, playback, textureLook, textureMotion, presence, geometry, compatibility, event
+}
+struct SceneControl: Identifiable {
+    let spec: ParameterSpec
+    let placement: ControlPlacement
+    var sectionTitle = ""
+    var shader: ShaderParameter?
+    var event: SceneTrigger?
+    var canMap = true
+    var id: String {spec.id}
+    var title: String {spec.title}
+    var referenceSection: String {
+        spec.isTrigger ? "event" : placement == .main ? "shader" : "common"
+    }
+}
+struct SceneControlSection: Identifiable {
+    let title: String
+    var controls: [SceneControl]
+    var id: String {title}
+}
+struct SceneControlCatalog {
+    var controls: [SceneControl] = []
+    var routable: [SceneControl] {controls.filter(\.canMap)}
+    var specs: [ParameterSpec] {routable.map(\.spec)}
+    var events: [SceneTrigger] {controls.compactMap(\.event)}
+    func at(_ placement: ControlPlacement) -> [SceneControl] {controls.filter {$0.placement==placement}}
+    var mainSections: [SceneControlSection] {
+        var result: [SceneControlSection] = []
+        for control in at(.main) {
+            if let i=result.firstIndex(where:{$0.title==control.sectionTitle}) {result[i].controls.append(control)}
+            else {result.append(.init(title:control.sectionTitle,controls:[control]))}
+        }
+        return result
+    }
+    static func make(sceneID: String, parameters: [ShaderParameter], compatibility: [ShaderParameter] = [],
+                     textured: Bool, textureKind: String?, testScene: Bool,
+                     routes: [String:ParameterRoute] = [:]) -> Self {
+        if testScene {
+            return .init(controls:["brightness","angleOffset","flipU","flipV"].map {
+                .init(spec:ParameterSpec.find($0),placement:$0=="brightness" ? .main : .geometry,canMap:false)
+            })
+        }
+        guard !textured || textureKind != nil else {return .init()}
+        var result=Self()
+        func common(_ key: String,_ title: String,_ placement: ControlPlacement) {
+            var spec=ParameterSpec.find(key);spec.title=title
+            result.controls.append(.init(spec:spec,placement:placement))
+        }
+        if textured {
+            common("speed","재생 속도",.main)
+            common("brightness","밝기",.main)
+            common("energy","발광",.main)
+            common("density","질감 대비",.textureLook)
+            common("hueShift","색상 이동",.textureLook)
+            common("turbulence","부분 흐름 변형",.textureMotion)
+            if textureKind == "image" {common("rotation","전체 회전",.textureMotion)}
+        } else {
+            for (index,parameter) in parameters.enumerated() {
+                let section=sceneID == "09_pulse_orbit"
+                    ? (["attraction","pulseDensity"].contains(parameter.id) ? "상태 · 모임과 활동" : "움직임 · 힘과 위치") : ""
+                result.controls.append(.init(spec:parameter.spec(index:index),placement:.main,sectionTitle:section,shader:parameter))
+            }
+            common("speed","전체 재생 속도",.playback)
+            common("brightness","전체 밝기",.playback)
+            if sceneID != "09_pulse_orbit" {common("hueShift","색상 이동",.playback)}
+            for (index,parameter) in compatibility.enumerated() {
+                guard let route=routes[parameter.id], route.input.enabled || route.output.enabled
+                    || (route.input.receivesDirectOSC && route.input.directOSCAddress != nil) else {continue}
+                result.controls.append(.init(spec:parameter.spec(index:parameters.count+index),placement:.compatibility,shader:parameter))
+            }
+        }
+        common("coverage","빛이 남는 범위",.presence)
+        common("gapSoftness","소멸 경계 부드러움",.presence)
+        if textured || sceneID != "09_pulse_orbit" {common("gapMotion","빈 구간 이동",.presence)}
+        common("fragmentation","조각화",.presence)
+        common("angleOffset","링 시작점",.geometry)
+        common("flipU","진행 방향 반전",.geometry)
+        common("flipV","안쪽 / 바깥쪽 반전",.geometry)
+        let defaults=SceneTrigger.catalog(scene:sceneID,textured:textured)
+        let migrated=sceneID == "09_pulse_orbit" && !textured ? [] : SceneTrigger.converted(routes:routes,specs:result.specs)
+        for event in defaults+migrated {result.controls.append(.init(spec:event.spec,placement:.event,event:event))}
+        return result
     }
 }
 

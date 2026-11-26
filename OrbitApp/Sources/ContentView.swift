@@ -22,30 +22,9 @@ private enum OrbitPanel: String, Identifiable {
     }
 }
 
-private enum SceneControlSection: Int, CaseIterable, Identifiable {
-    case basic = 0, rhythm = 3, orbit = 4, interaction = 5, color = 2, output = 6
-    var id: Int { rawValue }
-    var title: String {
-        switch self {
-        case .basic:return "기본 움직임"
-        case .rhythm:return "리듬"
-        case .orbit:return "궤도"
-        case .interaction:return "상호작용"
-        case .color:return "색상"
-        case .output:return "출력 신호"
-        }
-    }
-}
-
 struct ContentView: View {
     @ObservedObject var model: OrbitModel
     @State private var panel: OrbitPanel?
-    @State private var controlSection: SceneControlSection = .basic
-    private var groupedControls: Bool { model.shaderParameters.contains { $0.group >= 2 } }
-    private var mainParameters: [ShaderParameter] { model.shaderParameters.filter { $0.group < 2 } }
-    private var sectionParameters: [ShaderParameter] {
-        controlSection == .basic ? mainParameters : model.shaderParameters.filter { $0.group == controlSection.rawValue }
-    }
     var body: some View {
         VStack(spacing:0) {
             transport
@@ -97,8 +76,6 @@ struct ContentView: View {
             Divider()
             footer
         }
-        .onChange(of:model.selectedSceneID) { _ in controlSection = .basic }
-        .onChange(of:model.usesTexture) { _ in controlSection = .basic }
         .background(Color(white:0.045)).tint(orbitAccent).accentColor(orbitAccent)
         .buttonStyle(OrbitSecondaryButtonStyle())
         .sheet(item:$panel) { selected in
@@ -211,7 +188,9 @@ struct ContentView: View {
             if model.selectedScene?.testScene == true {
                 HStack(spacing:24) {
                     PatternPicker(model:model).frame(width:285)
-                    MappedParameterSlider(model:model,key:"brightness",title:"밝기").frame(width:200)
+                    ForEach(model.controlCatalog.at(.main)) {control in
+                        MappedSceneControl(model:model,control:control).frame(width:200)
+                    }
                     if [2,10,11].contains(Int(model.value("testPattern"))) {
                         VStack(alignment:.leading,spacing:4) {
                             Text("1–5 구간별 고유색 · 안쪽 빨강 띠 · 바깥쪽 파랑 띠")
@@ -221,31 +200,23 @@ struct ContentView: View {
                     }
                     Spacer()
                 }
-            } else if model.usesTexture {
-                HStack(spacing:24) {
-                    MappedParameterSlider(model:model,key:"speed",title:"재생 속도")
-                    MappedParameterSlider(model:model,key:"brightness",title:"밝기")
-                    MappedParameterSlider(model:model,key:"energy",title:"발광")
-                }
-            } else if model.selectedSceneID == PulseOrbitSimulation.sceneID {
+            } else if model.controlCatalog.mainSections.count > 1 {
                 GeometryReader { geometry in
-                    let available=max(0,geometry.size.width-41)
+                    let sections=model.controlCatalog.mainSections
+                    let available=max(0,geometry.size.width-CGFloat(sections.count-1)*41)
+                    let total=max(1,sections.reduce(0) {$0+$1.controls.count})
                     HStack(alignment:.top,spacing:20) {
-                        pulseControlGroup("상태 · 모임과 활동",keys:["attraction","pulseDensity"])
-                            .frame(width:available*0.4)
-                        Divider().frame(width:1,height:68)
-                        pulseControlGroup("움직임 · 힘과 위치",keys:["directionDrive","inertia","attractorPosition"])
-                            .frame(width:available*0.6)
+                        ForEach(Array(sections.enumerated()),id:\.element.id) { index,section in
+                            if index>0 {Divider().frame(width:1,height:68)}
+                            controlGroup(section).frame(width:available*CGFloat(section.controls.count)/CGFloat(total))
+                        }
                     }
                 }.frame(height:68)
-            } else if groupedControls {
-                groupedParameterControls
             } else {
-                LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:24),count:min(4,max(1,mainParameters.count))),spacing:12) {
-                    ForEach(mainParameters) { control in
-                        MappedParameterSlider(model:model,key:control.id,title:control.title)
-                    }
-                }.id(model.selectedSceneID)
+                let controls=model.controlCatalog.at(.main)
+                LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:24),count:min(4,max(1,controls.count))),spacing:12) {
+                    ForEach(controls) {control in MappedSceneControl(model:model,control:control)}
+                }.id("\(model.selectedSceneID):\(model.usesTexture)")
             }
             if model.selectedScene?.testScene == false {
                 Divider()
@@ -253,116 +224,13 @@ struct ContentView: View {
             }
         }.padding(.horizontal,20).padding(.vertical,12).background(orbitPanel)
     }
-    private func pulseControlGroup(_ title:String,keys:[String]) -> some View {
+    private func controlGroup(_ section: SceneControlSection) -> some View {
         VStack(alignment:.leading,spacing:8) {
-            Text(title).font(.system(size:12,weight:.semibold)).foregroundStyle(.secondary)
+            Text(section.title).font(.system(size:12,weight:.semibold)).foregroundStyle(.secondary)
             HStack(spacing:22) {
-                ForEach(keys,id:\.self) { key in
-                    MappedParameterSlider(model:model,key:key,title:model.parameterSpec(key).title)
-                }
+                ForEach(section.controls) {control in MappedSceneControl(model:model,control:control)}
             }
         }.frame(maxWidth:.infinity)
-    }
-    // Section navigation stays visible; the shared pane keeps the preview and
-    // trigger buttons stationary while using full-size labels and sliders.
-    private var groupedParameterControls: some View {
-        VStack(spacing:12) {
-            HStack(spacing:6) {
-                ForEach(SceneControlSection.allCases) { section in
-                    TimelineView(.periodic(from:.now,by:0.05)) { context in
-                        let keys=(section == .basic ? mainParameters : model.shaderParameters.filter {$0.group == section.rawValue}).map(\.id)
-                        let receipt=model.latestOSCInput(for:keys)
-                        Button { controlSection=section } label: {
-                            HStack(spacing:6) {
-                                Text(section.title).font(.system(size:13,weight:.medium))
-                                if section != .output {
-                                    OSCReceiveLight(receipt:receipt,date:context.date,title:section.title)
-                                        .accessibilityHidden(true)
-                                }
-                            }.frame(maxWidth:.infinity).frame(height:30)
-                                .foregroundStyle(controlSection == section ? Color.white : Color.white.opacity(0.8))
-                                .background(controlSection == section ? orbitAccent : Color.white.opacity(0.045),in:RoundedRectangle(cornerRadius:6))
-                                .contentShape(Rectangle())
-                        }.buttonStyle(.plain).modifier(AcceptFirstClick())
-                            .accessibilityLabel(section.title)
-                            .accessibilityValue((receipt?.activityLevel(at:context.date) ?? 0) > 0 ? "OSC 수신 중" : "")
-                            .accessibilityIdentifier("sceneSection_\(section.rawValue)")
-                            .accessibilityAddTraits(controlSection == section ? .isSelected : [])
-                    }
-                }
-            }
-            Group {
-                if controlSection == .output {
-                    HStack(spacing:12) {
-                        ForEach(model.parameterSpecs.filter(\.outputOnly)) { signal in
-                            VStack(alignment:.leading,spacing:7) {
-                                HStack(spacing:5) {
-                                    Text(signal.title).font(.system(size:13,weight:.medium)).help(signal.detail)
-                                    ParameterRouteButton(model:model,key:signal.id,title:signal.title)
-                                    Spacer(minLength:0)
-                                }
-                                TimelineView(.periodic(from:.now,by:0.1)) { _ in
-                                    Text(String(format:"%.3f",model.controlValue(signal.id)))
-                                        .font(.system(size:20,design:.monospaced)).monospacedDigit()
-                                }.accessibilityIdentifier("signalValue_"+signal.id)
-                                Text(model.route(for:signal.id).output.sendsTriggerValue(spec:signal)
-                                     ? (signal.eventOutput ? "트리거 · 교차마다 1회" : "트리거 · 값 변경마다 1회")
-                                     : (signal.eventOutput ? "연속값 · 교차마다" : "연속값 · 0.0–1.0"))
-                                    .font(.system(size:12)).foregroundStyle(.secondary)
-                            }.padding(10).frame(maxWidth:.infinity,alignment:.leading)
-                                .background(Color.white.opacity(0.025),in:RoundedRectangle(cornerRadius:6))
-                        }
-                    }
-                } else {
-                    LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:24),count:min(4,max(1,sectionParameters.count))),spacing:14) {
-                        ForEach(sectionParameters) { control in sceneParameterControl(control) }
-                    }
-                }
-            }.id("\(model.selectedSceneID):\(controlSection.rawValue)")
-                .frame(height:106,alignment:.top)
-                .accessibilityElement(children:.contain).accessibilityLabel(controlSection.title)
-        }
-    }
-    @ViewBuilder
-    private func sceneParameterControl(_ control: ShaderParameter) -> some View {
-        if control.group == 2 {
-            VStack(alignment:.leading,spacing:6) {
-                HStack(spacing:5) {
-                    Circle().fill(model.value(control.id) >= 0.5 ? Color.white : Color(.sRGB,red:1,green:0,blue:0,opacity:1))
-                        .frame(width:10,height:10).accessibilityHidden(true)
-                    Text(control.title).font(.system(size:13)).help(control.detail)
-                    ParameterRouteButton(model:model,key:control.id,title:control.title)
-                }
-                Picker(control.title,selection:Binding(
-                    get:{model.value(control.id) >= 0.5 ? 1 : 0},
-                    set:{model.setNormalizedParameterValue(control.id,Double($0))})) {
-                        Text("레드").tag(0);Text("화이트").tag(1)
-                    }.labelsHidden().pickerStyle(.segmented).controlSize(.regular)
-                        .disabled(model.route(for:control.id).input.enabled)
-                        .accessibilityIdentifier("parameter_"+control.id)
-            }.frame(height:46)
-        } else if control.isSwitch == true {
-            VStack(alignment:.leading,spacing:6) {
-                HStack(spacing:5) {
-                    Text(control.title).font(.system(size:13)).help(control.detail)
-                    ParameterRouteButton(model:model,key:control.id,title:control.title)
-                    Spacer(minLength:0)
-                }
-                HStack {
-                    Text(model.value(control.id) >= 0.5 ? "켜짐" : "꺼짐")
-                        .font(.system(size:13)).foregroundStyle(.secondary)
-                    Spacer()
-                    Toggle(control.title,isOn:Binding(
-                        get:{model.value(control.id) >= 0.5},
-                        set:{model.setNormalizedParameterValue(control.id,$0 ? 1:0)}))
-                        .labelsHidden().toggleStyle(.switch).controlSize(.small)
-                        .disabled(model.route(for:control.id).input.enabled)
-                        .accessibilityIdentifier("parameter_"+control.id)
-                }
-            }.frame(height:46)
-        } else {
-            MappedParameterSlider(model:model,key:control.id,title:control.title,fontSize:13,controlHeight:46)
-        }
     }
     private var footer: some View {
         HStack(spacing:12) {
@@ -428,47 +296,22 @@ private struct OrbitSettingsPanel: View {
         VStack(alignment:.leading,spacing:15) {
             Picker("공통 조절",selection:$tab) {
                 Text("재생 · 색").tag(0);Text("빛 · 소멸").tag(1)
-                if !model.connectedCompatibilityParameters.isEmpty {Text("기존 연결").tag(2)}
+                if !model.controlCatalog.at(.compatibility).isEmpty {Text("기존 연결").tag(2)}
             }.pickerStyle(.segmented)
-            if tab == 0 {
-                parameter("전체 재생 속도","speed")
-                parameter("전체 밝기","brightness")
-                if model.parameterSpecs.contains(where: { $0.id == "hueShift" }) { parameter("색상 이동","hueShift") }
-                Text("모든 씬에 공통인 재생·색 조절입니다. 씬 고유의 파라미터는 메인 화면에 모두 표시됩니다.")
-                    .font(.system(size:11)).foregroundStyle(.secondary)
-            } else if tab == 1 {
-                parameter("빛이 남는 범위","coverage")
-                parameter("소멸 경계 부드러움","gapSoftness")
-                parameter("빈 구간 이동","gapMotion")
-                parameter("조각화","fragmentation")
-                Text("링의 점등 범위와 빈 구간을 제어합니다. 범위 0은 전체 소등, 1은 전체 범위입니다.")
-                    .font(.system(size:10)).foregroundStyle(.secondary)
-            } else {
-                ForEach(model.connectedCompatibilityParameters) { control in
-                    parameter(control.title,control.id)
-                }
-                Text("이전 버전에서 연결한 입력·출력을 유지합니다. 연결 버튼에서 확인하거나 해제할 수 있습니다.")
-                    .font(.system(size:11)).foregroundStyle(.secondary)
+            ForEach(model.controlCatalog.at(tab==0 ? .playback : tab==1 ? .presence : .compatibility)) { control in
+                MappedSceneControl(model:model,control:control)
             }
+            Text(tab==0 ? "씬 고유의 파라미터는 메인 화면에 표시됩니다."
+                 : tab==1 ? "범위 0은 전체 소등, 1은 전체 범위입니다."
+                 : "이전 버전에서 사용하던 연결입니다. 같은 항목이 OSC 전체 맵에도 표시됩니다.")
+                .font(.system(size:11)).foregroundStyle(.secondary)
         }
     }
     private var referenceLook:some View {
         VStack(alignment:.leading,spacing:15) {
             Picker("연출 설정",selection:$tab) {Text("밀도 · 색").tag(0);Text("움직임").tag(1);Text("빛 · 소멸").tag(2)}.pickerStyle(.segmented)
-            if tab==0 {
-                parameter(model.usesTexture ? "질감 대비" : "밀도","density")
-                parameter("색상 이동","hueShift")
-                Text(model.usesTexture ? "추출한 원본을 재생합니다." : "빛의 형태·색·질감·시간 변화를 셰이더 코드로 생성합니다.").font(.system(size:10)).foregroundStyle(.secondary)
-            } else if tab==1 {
-                parameter(model.usesTexture ? "부분 흐름 변형" : "움직임","turbulence")
-                if model.usesTexture && model.selectedScene?.texture?.kind=="image" {parameter("전체 회전","rotation")}
-                Text("부분 흐름과 회전을 조절합니다. 재생 속도·발광은 메인 화면에서 조절합니다.").font(.system(size:10)).foregroundStyle(.secondary)
-            } else {
-                parameter("빛이 남는 범위","coverage")
-                parameter("소멸 경계 부드러움","gapSoftness")
-                parameter("빈 구간 이동","gapMotion")
-                parameter("조각화","fragmentation")
-                Text("범위 0은 전체 소등, 1은 전체 범위입니다.").font(.system(size:10)).foregroundStyle(.secondary)
+            ForEach(model.controlCatalog.at(tab==0 ? .textureLook : tab==1 ? .textureMotion : .presence)) { control in
+                MappedSceneControl(model:model,control:control)
             }
         }
     }
@@ -507,29 +350,15 @@ private struct OrbitSettingsPanel: View {
                 Text("LED 5행 배치 고정 · 16:9 유지 · 남는 영역은 검정\n기준 3840 × 2160 · 링 프리뷰는 운영 화면 전용")
                     .font(.system(size:10)).foregroundStyle(.secondary)
             } else {
-                parameter("링 시작점","angleOffset")
-                HStack {
-                    Toggle("진행 방향 반전",isOn:boolBinding("flipU"))
-                        .disabled(model.route(for:"flipU").input.enabled && model.selectedScene?.testScene == false)
-                    ParameterRouteButton(model:model,key:"flipU",title:"진행 방향 반전")
-                }
-                HStack {
-                    Toggle("안쪽 / 바깥쪽 반전",isOn:boolBinding("flipV"))
-                        .disabled(model.route(for:"flipV").input.enabled && model.selectedScene?.testScene == false)
-                    ParameterRouteButton(model:model,key:"flipV",title:"안쪽 / 바깥쪽 반전")
+                ForEach(model.controlCatalog.at(.geometry)) {control in
+                    MappedSceneControl(model:model,control:control)
                 }
                 Divider()
                 Text("메인 화면의 Calibration 씬에서 구간 번호·그리드·안팎 방향·RGB·회색·단일 픽셀 패턴을 선택합니다.").font(.system(size:11)).foregroundStyle(.secondary)
             }
         }.font(.system(size:12))
     }
-    private func parameter(_ title:String,_ key:String)->some View {
-        MappedParameterSlider(model:model,key:key,title:title)
-    }
-    private func boolBinding(_ key:String)->Binding<Bool> {Binding(get:{model.value(key)>0.5},set:{model.setValue(key,$0 ? 1:0)})}
-    private func labeled<V:View>(_ title:String,@ViewBuilder content:()->V)->some View {
-        VStack(alignment:.leading,spacing:5){Text(title).font(.system(size:10)).foregroundStyle(.secondary);content()}
-    }
+
 }
 
 private struct PlaybackTimeReadout: View {

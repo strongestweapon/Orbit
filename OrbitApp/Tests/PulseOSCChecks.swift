@@ -97,9 +97,11 @@ final class PulseInbox {
         for event in model.sceneTriggers {
             model.setRoute(event.id) {$0.output.enabled=true;$0.output.address="/qa/event/"+event.id}
         }
+        // Saved internal telemetry routes must not recreate hidden controls or send.
         for key in [PulseOrbitOutputs.accentAngle,PulseOrbitOutputs.accentStrength] {
             model.setRoute(key) {$0.input.enabled=true;$0.output.enabled=true;$0.output.address="/qa/meta/"+key}
             precondition(!model.route(for:key).input.enabled)
+            precondition(!model.controlCatalog.routable.contains {$0.id==key})
         }
         let before=model.parameterValues
         let key=SceneTrigger.departureID,address=model.inputOSCAddress(key,sceneID:PulseOrbitSimulation.sceneID,textured:false)
@@ -112,9 +114,8 @@ final class PulseInbox {
         precondition(model.pulseAccentCount==20 && model.parameterValues==before)
         let packet=inbox.snapshot().0.first {OSCDecoder.decode($0).contains {$0.address=="/qa/event/"+key}}!
         let fields=OSCDecoder.decode(packet)
-        precondition(fields.map(\.address)==["/qa/meta/accentAngle","/qa/meta/accentStrength","/qa/event/"+key])
+        precondition(fields.map(\.address)==["/qa/event/"+key])
         precondition(fields.last!.values==[1] && fields.allSatisfy {$0.values.count==1 && (0...1).contains($0.values[0])})
-        precondition(abs(fields[0].values[0]-0.81)<0.00001)
         for event in model.sceneTriggers where event.id != key {model.triggerParameter(event.id)}
         precondition(model.pulseAccentCount==23 && model.pulseLineCount==4)
         for _ in 0..<7 {model.triggerParameter(SceneTrigger.addLineID)}
@@ -127,12 +128,13 @@ final class PulseInbox {
         wait("immediate repeated completion cue") {count("/qa/event/"+SceneTrigger.completionID)==2}
         model.testControlOutput(SceneTrigger.completionID)
         wait("explicit send test") {count("/qa/event/"+SceneTrigger.completionID)==3}
-        // Metadata can be enabled independently without requiring the associated cue checkbox.
+        // Disabling the visible cue must not leave an undisclosed metadata sender.
         for event in model.sceneTriggers {model.setRoute(event.id) {$0.output.enabled=false}}
         model.restartPlayback();model.playing=false
         let metaBefore=count("/qa/meta/accentAngle"),cueBefore=count("/qa/event/"+key)
         model.triggerParameter(key)
-        wait("independent metadata output") {count("/qa/meta/accentAngle")==metaBefore+1}
+        pump(0.2)
+        precondition(count("/qa/meta/accentAngle")==metaBefore && metaBefore==0)
         precondition(count("/qa/event/"+key)==cueBefore)
         // A continuous value can still send unit cues on the same address.
         let input="/qa/in/inertia",out="/qa/out/inertia"
@@ -159,6 +161,6 @@ final class PulseInbox {
             send(cue.address,1);wait("repeated scene cue") {model.globalReceipts[cue.id]?.triggerCount==expected}
             precondition(model.pulseLineCount==3 && model.pulseAccentCount==0)
         }
-        print("PASS: five real UDP control inputs/outputs, integer rejection, four causal commands, repeated inputs counted, 24-voice bound, 3–10 topology, event metadata bundle, every rapid command and repeated continuous packet emits, no backlog, explicit test, continuous-to-trigger same address, persistence and scene reset")
+        print("PASS: five real UDP control inputs/outputs, integer rejection, four causal commands, repeated inputs counted, 24-voice bound, 3–10 topology, no hidden telemetry output, every rapid command and repeated continuous packet emits, no backlog, explicit test, continuous-to-trigger same address, persistence and scene reset")
     }
 }

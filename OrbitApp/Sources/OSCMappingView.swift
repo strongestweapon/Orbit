@@ -1,5 +1,27 @@
 import SwiftUI
 
+enum MappingGroup: Int, CaseIterable {
+    case global, parameters, triggers, common, simulation
+    var title: String {
+        switch self {
+        case .global: return "글로벌 동작"
+        case .parameters: return "씬 파라미터"
+        case .triggers: return "트리거 이벤트"
+        case .common: return "공통 조절"
+        case .simulation: return "출력 전용 신호"
+        }
+    }
+    var countLabel: String {
+        switch self {
+        case .global: return "글로벌"
+        case .parameters: return "씬"
+        case .triggers: return "트리거"
+        case .common: return "공통"
+        case .simulation: return "출력 전용"
+        }
+    }
+}
+
 struct MappingRow: Identifiable {
     var id: String
     var title: String
@@ -16,6 +38,7 @@ struct MappingRow: Identifiable {
     var searchText = ""
     var sortAddress = ""
     var globalRoute: GlobalOSCMapping?
+    var group: MappingGroup = .global
     var isEvent: Bool {globalID != nil || spec?.isTrigger == true || spec?.eventOutput == true}
     /// A continuous input may produce trigger output; either side can match a filter.
     func matchesSignalType(_ filter: Int) -> Bool {
@@ -73,6 +96,27 @@ struct MappingRow: Identifiable {
     }
 }
 
+struct MappingSection: Identifiable {
+    let id: String
+    let group: MappingGroup
+    var rows: [MappingRow]
+    static func sections(_ rows: [MappingRow], output: Bool) -> [MappingSection] {
+        var result: [MappingSection] = []
+        for row in rows where (output ? row.globalID == nil : row.spec?.outputOnly != true) {
+            let id="\(row.sceneID ?? "global"):\(row.textured):\(row.group.rawValue)"
+            if let i=result.firstIndex(where:{$0.id==id}) {result[i].rows.append(row)}
+            else {result.append(.init(id:id,group:row.group,rows:[row]))}
+        }
+        return result
+    }
+    static func countSummary(_ sections: [MappingSection]) -> String {
+        MappingGroup.allCases.compactMap { group in
+            let count=sections.filter {$0.group==group}.reduce(0) {$0+$1.rows.count}
+            return count>0 ? "\(group.countLabel) \(count)" : nil
+        }.joined(separator:" · ")
+    }
+}
+
 extension OrbitModel {
     /// Project the current control catalog, including commands never configured by the operator.
     /// Saved routes supply connections; they do not define which controls exist.
@@ -85,11 +129,12 @@ extension OrbitModel {
         }
         for scene in scenes where !scene.testScene {
             for textured in (scene.texture == nil ? [false] : [false,true]) {
-                let catalog=specs(for:scene.id,textured:textured)
+                let controls=controls(for:scene.id,textured:textured).routable
+                let catalog=controls.map(\.spec)
                 let savedRoutes=(textured ? settings[scene.id]?.textureParameterRoutes : settings[scene.id]?.parameterRoutes) ?? [:]
-                let ordered=catalog.filter(\.isTrigger)+catalog.filter {!$0.isTrigger}
                 let active=selectedSceneID == scene.id && usesTexture == textured
-                for spec in ordered {
+                for control in controls {
+                    let spec=control.spec
                     let defaults=effectiveRoute(ParameterRoute.defaults(scene:scene.id,parameter:spec.id,spec:spec))
                     let route=effectiveRoute(savedRoutes[spec.id] ?? defaults)
                     let source=route.input.enabled ? route.input.sourceParameter.map {key in catalog.first {$0.id==key}?.title ?? key} : nil
@@ -100,7 +145,9 @@ extension OrbitModel {
                         scope:scene.name+" · "+(textured ? "원본" : "실시간")+" · "+(spec.isTrigger || spec.eventOutput ? "트리거" : "연속값"),
                         address:address,active:active,value:active ? directOSCReceipts[spec.id]?.value : nil,sceneID:scene.id,textured:textured,spec:spec,route:route,configured:configured || route.input.directOSCAddress != nil || route.input.directOSCEnabled != nil,
                         searchText:[spec.id,route.output.endpointLabel].joined(separator:" "),
-                        sortAddress:spec.outputOnly ? route.output.address : direct))
+                        sortAddress:spec.outputOnly ? route.output.address : direct,
+                        group:spec.outputOnly ? .simulation : spec.isTrigger ? .triggers
+                            : control.placement == .main ? .parameters : .common))
                 }
             }
         }
@@ -114,6 +161,7 @@ extension OrbitModel {
             } else {
                 if left.sceneID != right.sceneID {return (left.sceneID ?? "").localizedStandardCompare(right.sceneID ?? "") == .orderedAscending}
                 if left.textured != right.textured {return !left.textured}
+                if left.group != right.group {return left.group.rawValue < right.group.rawValue}
             }
             let order=left.sortAddress.localizedStandardCompare(right.sortAddress)
             return order == .orderedSame ? left.id < right.id : order == .orderedAscending
@@ -184,21 +232,26 @@ struct OSCMappingView: View {
             .onAppear {loadNetworkSettings()}
     }
     private func signalPane(output: Bool) -> some View {
-        let entries=rows.filter {output ? $0.globalID == nil : $0.spec?.outputOnly != true}
+        let sections=MappingSection.sections(rows,output:output)
         return VStack(alignment:.leading,spacing:8) {
             HStack {
                 Text(output ? "송신 주소" : "수신 주소").fontWeight(.medium)
-                Text("\(entries.count)개").foregroundStyle(.secondary).monospacedDigit()
                 Spacer()
                 Text(output ? "최근 송신" : "최근 수신").foregroundStyle(.secondary)
             }.font(.system(size:12)).padding(.horizontal,4)
+            Text(MappingSection.countSummary(sections)).font(.system(size:12))
+                .foregroundStyle(.secondary).monospacedDigit().padding(.horizontal,4)
+                .accessibilityIdentifier(output ? "mappingOutputCounts" : "mappingInputCounts")
             ScrollViewReader {proxy in
                 ScrollView {
                     LazyVStack(spacing:8) {
-                        ForEach(entries) {row in
-                            OSCMappingCard(model:model,row:row,outputSide:output).id(row.id)
+                        ForEach(sections) {section in
+                            sectionHeader(section,output:output).id(section.id)
+                            ForEach(section.rows) {row in
+                                OSCMappingCard(model:model,row:row,outputSide:output).id(row.id)
+                            }
                         }
-                        if entries.isEmpty {
+                        if sections.isEmpty {
                             VStack(spacing:12) {
                                 Image(systemName:output ? "arrow.up.right" : "arrow.down.left").font(.system(size:22))
                                 Text(output && scope == 1 ? "글로벌 OSC 출력 없음" : "조건에 맞는 신호 없음").fontWeight(.medium)
@@ -208,13 +261,27 @@ struct OSCMappingView: View {
                         }
                     }.padding(.trailing,2)
                 }.accessibilityIdentifier(output ? "mappingOutputList" : "mappingInputList")
-                    .onChange(of:scope) {_,_ in if let first=entries.first {proxy.scrollTo(first.id,anchor:.top)}}
-                    .onChange(of:signalType) {_,_ in if let first=entries.first {proxy.scrollTo(first.id,anchor:.top)}}
-                    .onChange(of:sceneFilter) {_,_ in if let first=entries.first {proxy.scrollTo(first.id,anchor:.top)}}
-                    .onChange(of:sourceFilter) {_,_ in if let first=entries.first {proxy.scrollTo(first.id,anchor:.top)}}
-                    .onChange(of:search) {_,_ in if let first=entries.first {proxy.scrollTo(first.id,anchor:.top)}}
+                    .onChange(of:scope) {_,_ in if let first=sections.first {proxy.scrollTo(first.id,anchor:.top)}}
+                    .onChange(of:signalType) {_,_ in if let first=sections.first {proxy.scrollTo(first.id,anchor:.top)}}
+                    .onChange(of:sceneFilter) {_,_ in if let first=sections.first {proxy.scrollTo(first.id,anchor:.top)}}
+                    .onChange(of:sourceFilter) {_,_ in if let first=sections.first {proxy.scrollTo(first.id,anchor:.top)}}
+                    .onChange(of:search) {_,_ in if let first=sections.first {proxy.scrollTo(first.id,anchor:.top)}}
             }
         }
+    }
+    private func sectionHeader(_ section: MappingSection, output: Bool) -> some View {
+        HStack(spacing:8) {
+            Text(section.group.title).fontWeight(.semibold)
+            Text("\(section.rows.count)개").monospacedDigit()
+            Spacer(minLength:0)
+            if let row=section.rows.first,let scene=model.scenes.first(where:{$0.id==row.sceneID}) {
+                Text(scene.name+" · "+(row.textured ? "원본" : "실시간")).foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }.font(.system(size:13)).padding(.horizontal,8).padding(.vertical,7)
+            .background(Color.white.opacity(0.045),in:RoundedRectangle(cornerRadius:6))
+            .accessibilityElement(children:.combine)
+            .accessibilityIdentifier((output ? "mappingOutputSection_" : "mappingInputSection_")+section.id)
     }
     private var networkHeader: some View {
         VStack(alignment:.leading,spacing:6) {
@@ -285,7 +352,6 @@ struct OSCMappingView: View {
                 Picker("종류",selection:$signalType) {Text("모든 신호").tag(0);Text("연속값").tag(1);Text("트리거").tag(2)}
                     .pickerStyle(.segmented).frame(width:270).accessibilityIdentifier("mappingSignalType")
                 TextField("파라미터·동작·씬·입출력 주소 검색",text:$search).accessibilityIdentifier("mappingSearch")
-                Text("\(rows.count)개").monospacedDigit().foregroundStyle(.secondary).frame(minWidth:44,alignment:.trailing)
             }
         }
     }

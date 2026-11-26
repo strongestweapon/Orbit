@@ -68,6 +68,14 @@ struct GlobalOSCMapping: Identifiable, Codable, Equatable {
     var sceneID: String?
     var triggerMode: ParameterInputMode?
     var threshold: EventThreshold?
+    static func defaults(sceneIDs: [String]) -> [Self] {
+        sceneIDs.map {.init(address:"/orbit/scene/"+$0,action:.scene,sceneID:$0)}
+            + [.init(address:"/orbit/scene/next",action:.next),
+               .init(address:"/orbit/scene/previous",action:.previous),
+               .init(address:"/orbit/restart",action:.restart),
+               .init(address:"/orbit/play",action:.play),
+               .init(address:"/orbit/pause",action:.pause)]
+    }
     var isValid: Bool {
         address.hasPrefix("/") && address.utf8.count <= 1024 && argument >= 0 && argument < 16
             && !address.unicodeScalars.contains { CharacterSet.whitespacesAndNewlines.contains($0) || CharacterSet.controlCharacters.contains($0) }

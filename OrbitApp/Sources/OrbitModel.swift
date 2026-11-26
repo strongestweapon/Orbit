@@ -162,30 +162,21 @@ final class OrbitModel: ObservableObject {
         var result=saved;result.output=oscOutputDestination.applying(to:saved.output)
         result.input=saved.input.addressOnly(using:sensors);return result
     }
-    var shaderParameters: [ShaderParameter] { usesTexture ? [] : (selectedScene?.parameters ?? []) }
-    var allShaderParameters: [ShaderParameter] { usesTexture ? [] : (selectedScene?.allParameters ?? []) }
-    var connectedCompatibilityParameters: [ShaderParameter] {
-        (selectedScene?.compatibilityParameters ?? []).filter {
-            let route = activeRoutes[$0.id]
-            return route?.input.enabled == true || route?.output.enabled == true
-        }
-    }
-    private func continuousSpecs(scene: SceneDescriptor, textured: Bool) -> [ParameterSpec] {
-        if textured || scene.testScene {return ParameterSpec.all}
-        let excluded=["density","turbulence","energy","rotation"]+(scene.id == PulseOrbitSimulation.sceneID ? ["hueShift"] : [])
-        return ParameterSpec.all.filter {!excluded.contains($0.id)} + scene.allParameters.enumerated().map {$0.element.spec(index:$0.offset)}
-            + (scene.id == PulseOrbitSimulation.sceneID ? PulseOrbitOutputs.specs : [])
-    }
-    func triggers(for sceneID: String, textured: Bool) -> [SceneTrigger] {
-        guard let scene=scenes.first(where:{$0.id==sceneID}),!scene.testScene else {return []}
+    var controlCatalog: SceneControlCatalog {controls(for:selectedSceneID,textured:usesTexture)}
+    func controls(for sceneID: String, textured: Bool) -> SceneControlCatalog {
+        guard let scene=scenes.first(where:{$0.id==sceneID}) else {return .init()}
         let routes=(textured ? settings[sceneID]?.textureParameterRoutes : settings[sceneID]?.parameterRoutes) ?? [:]
-        let catalog=SceneTrigger.catalog(scene:sceneID,textured:textured)
-        return sceneID == PulseOrbitSimulation.sceneID && !textured ? catalog : catalog+SceneTrigger.converted(routes:routes,specs:continuousSpecs(scene:scene,textured:textured))
+        return .make(sceneID:scene.id,parameters:scene.parameters,compatibility:scene.compatibilityParameters ?? [],
+                     textured:textured,textureKind:scene.texture?.kind,testScene:scene.testScene,routes:routes)
+    }
+    var shaderParameters: [ShaderParameter] {controlCatalog.at(.main).compactMap(\.shader)}
+    var allShaderParameters: [ShaderParameter] { usesTexture ? [] : (selectedScene?.allParameters ?? []) }
+    func triggers(for sceneID: String, textured: Bool) -> [SceneTrigger] {
+        controls(for:sceneID,textured:textured).events
     }
     var sceneTriggers: [SceneTrigger] {triggers(for:selectedSceneID,textured:usesTexture)}
     func specs(for sceneID: String, textured: Bool) -> [ParameterSpec] {
-        guard let scene=scenes.first(where:{$0.id==sceneID}) else {return []}
-        return continuousSpecs(scene:scene,textured:textured)+triggers(for:sceneID,textured:textured).map(\.spec)
+        controls(for:sceneID,textured:textured).specs
     }
     var parameterSpecs: [ParameterSpec] {specs(for:selectedSceneID,textured:usesTexture)}
     func parameterSpec(_ key: String) -> ParameterSpec { parameterSpecs.first { $0.id == key } ?? .find(key) }
@@ -255,12 +246,7 @@ final class OrbitModel: ObservableObject {
             let manifest = try JSONDecoder().decode(SceneManifest.self, from: Data(contentsOf: url))
             scenes = manifest.scenes.filter { !$0.testScene } + manifest.scenes.filter { $0.testScene }
             for scene in scenes { settings[scene.id] = SceneSettings(values: scene.defaults, speed: scene.defaultClockSpeed) }
-            globalOSC = scenes.map { GlobalOSCMapping(address:"/orbit/scene/"+$0.id, action:.scene, sceneID:$0.id) }
-                + [GlobalOSCMapping(address:"/orbit/scene/next",action:.next),
-                   GlobalOSCMapping(address:"/orbit/scene/previous",action:.previous),
-                   GlobalOSCMapping(address:"/orbit/restart",action:.restart),
-                   GlobalOSCMapping(address:"/orbit/play",action:.play),
-                   GlobalOSCMapping(address:"/orbit/pause",action:.pause)]
+            globalOSC = GlobalOSCMapping.defaults(sceneIDs:scenes.map(\.id))
             if let data = defaults.data(forKey: "OrbitSettings.v1"),
                let stored = try? JSONDecoder().decode(StoredSettings.self, from: data) {
                 if !stored.sensors.isEmpty,defaults.data(forKey:"OrbitSettings.beforeAddressOnly.v1") == nil {
@@ -329,7 +315,8 @@ final class OrbitModel: ObservableObject {
             settings[scene.id]?.migrateRoutes(scene:scene.id)
             settings[scene.id]?.migrateOSCOutputs()
             for textured in [false,true] {
-                settings[scene.id]?.separateTriggerRoutes(scene:scene.id,specs:continuousSpecs(scene:scene,textured:textured),textured:textured)
+                let controls=specs(for:scene.id,textured:textured).filter {!$0.isTrigger}
+                settings[scene.id]?.separateTriggerRoutes(scene:scene.id,specs:controls,textured:textured)
             }
             settings[scene.id]?.migrateOSCInputs(using:sensors)
         }
@@ -704,7 +691,8 @@ final class OrbitModel: ObservableObject {
     /// Trigger IDs are commands, never writable continuous controls.
     func triggerParameter(_ key: String) {
         let spec=parameterSpec(key),route=route(for:key)
-        guard selectedScene?.testScene == false,spec.isTrigger,!isShuttingDown else { return }
+        guard selectedScene?.testScene == false,spec.isTrigger,!isShuttingDown,
+              controlCatalog.events.contains(where:{$0.id==key}) else { return }
         if selectedSceneID == PulseOrbitSimulation.sceneID,!usesTexture,
            let kind=pulseAccentKind(key) {
             if key == SceneTrigger.addLineID {pulseOrbit.addLine(limit:pulseLineLimit);lastPulseCrossing=nil}
@@ -713,21 +701,12 @@ final class OrbitModel: ObservableObject {
             lastPulseAccentAngle=accent.origin;lastPulseAccentStrength=accent.strength
         }
         parameterEvents.fire(key,route:route.input,at:CACurrentMediaTime())
-        let accentMetadataEnabled=selectedSceneID == PulseOrbitSimulation.sceneID && pulseAccentKind(key) != nil
-            && [PulseOrbitOutputs.accentAngle,PulseOrbitOutputs.accentStrength].contains {self.route(for:$0).output.enabled}
-        if controlOutputEnabled && (route.output.enabled || accentMetadataEnabled) {sendParameterEvent(key)}
+        if controlOutputEnabled && route.output.enabled {sendParameterEvent(key)}
     }
     private func sendParameterEvent(_ key: String, test: Bool = false) {
         let route=route(for:key).output,id=controlEmissionID(key)
         if test,outputIssue(for:key) != nil {return}
-        var emissions: [ControlEmission] = (test || route.enabled) && outputIssue(for:key) == nil ? [.init(id:id,route:route,value:1)] : []
-        if !test,selectedSceneID == PulseOrbitSimulation.sceneID,!usesTexture,pulseAccentKind(key) != nil {
-            let metadata=[PulseOrbitOutputs.accentAngle,PulseOrbitOutputs.accentStrength].compactMap {key in
-                parameterSpecs.first {$0.id==key && self.route(for:key).output.enabled}
-            }
-            emissions=pulseEventEmissions(for:metadata,values:[PulseOrbitOutputs.accentAngle:lastPulseAccentAngle,
-                     PulseOrbitOutputs.accentStrength:lastPulseAccentStrength])+emissions
-        }
+        let emissions: [ControlEmission] = (test || route.enabled) && outputIssue(for:key) == nil ? [.init(id:id,route:route,value:1)] : []
         guard !emissions.isEmpty else {return}
         controlOutput.sendEvents(emissions,test:test)
     }
