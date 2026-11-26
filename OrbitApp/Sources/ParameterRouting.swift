@@ -75,14 +75,19 @@ enum PulseOrbitOutputs {
     static let angle = "crossingAngle"
     static let strength = "crossingStrength"
     static let proximity = "proximity"
+    static let accentAngle = "accentAngle"
+    static let accentStrength = "accentStrength"
+    static func isCrossing(_ key: String) -> Bool {[trigger,angle,strength].contains(key)}
     static let specs: [ParameterSpec] = [
-        .init(id:trigger,title:"교차 발생",detail:"실제로 교차할 때마다 OSC 1.0을 한 번 보냅니다. 같은 값도 생략하지 않으며, 대기 중 0이나 하트비트를 보내지 않습니다.",defaultCC:90,outputOnly:true,eventOutput:true),
+        .init(id:accentAngle,title:"사건 위치",detail:"최근 강조 띠의 생성 위치입니다. 송신 가능한 큐가 선택되면 같은 OSC bundle에서 이벤트보다 먼저 보냅니다. 0/1은 12시입니다.",outputOnly:true,eventOutput:true),
+        .init(id:accentStrength,title:"사건 강도",detail:"최근 강조 띠의 강도입니다. 큐와 함께 한 번 보냅니다.",outputOnly:true,eventOutput:true),
+        .init(id:trigger,title:"교차 발생",detail:"실제 교차를 OSC 1.0으로 보냅니다. 자연 발생 교차만 6초에 최대 1회이며 버튼·외부 OSC 트리거는 매번 즉시 송신합니다.",defaultCC:90,outputOnly:true,eventOutput:true),
         .init(id:angle,title:"교차 위치",detail:"교차할 때의 논리 링 위치입니다. 0/1은 12시, 0.25는 3시입니다. 영상 출력 방향 보정 전 좌표입니다.",defaultCC:91,outputOnly:true,eventOutput:true),
         .init(id:strength,title:"교차 강도",detail:"교차한 두 펄스의 실제 방출 강도 중 작은 값입니다. 교차할 때만 0–1 실수로 보냅니다.",defaultCC:92,outputOnly:true,eventOutput:true),
         .init(id:proximity,title:"현재 근접도",detail:"안팎 펄스 중 가장 강한 근접 연결입니다. 멀면 0, 같은 각도에서 밝게 만나면 1입니다. 연속 출력입니다.",defaultCC:93,outputOnly:true)
     ]
     static func address(_ key: String) -> String {
-        let tail = [trigger:"crossing",angle:"angle",strength:"strength",proximity:"proximity"][key] ?? key
+        let tail = [trigger:"crossing",angle:"angle",strength:"strength",proximity:"proximity",accentAngle:"accent/angle",accentStrength:"accent/strength"][key] ?? key
         return "/orbit/09_pulse_orbit/events/" + tail
     }
 }
@@ -255,6 +260,9 @@ struct ParameterEvents {
 
 struct SceneTrigger: Identifiable {
     static let addLineID = "trigger.addLine"
+    static let departureID = "trigger.departure"
+    static let breakthroughID = "trigger.breakthrough"
+    static let completionID = "trigger.completion"
     let id: String
     let title: String
     let detail: String
@@ -301,10 +309,11 @@ struct SceneTrigger: Identifiable {
                 .init(id:"trigger.goldenFlash",title:"금빛 섬광",detail:"금빛 머리가 넓어지며 강하게 빛납니다.",offsets:["headGlow":0.6,"headWidth":0.4],brightnessBoost:2),
                 .init(id:"trigger.tailFade",title:"꼬리 소멸",detail:"남아 있는 금빛이 사라졌다 돌아옵니다.",offsets:["coverage":-0.7])],
             "09_pulse_orbit":[
-                .init(id:"trigger.orbitPulse",title:"궤도 펄스",detail:"각 궤도의 펄스가 굵고 길게 솟았다 돌아옵니다.",offsets:["lineWidth":0.5,"pulseLength":0.35,"pulseDensity":0.5,"rhythmAmount":-0.7],brightnessBoost:1),
-                .init(id:"trigger.gravityImpact",title:"중력 충격",detail:"지정한 중력 위치로 펄스를 한 번 끌어당깁니다.",offsets:["attraction":0.7,"inertia":-0.4]),
-                .init(id:"trigger.orbitReverse",title:"궤도 반전",detail:"구동 방향을 잠깐 뒤집었다 복귀합니다. 관성은 유지됩니다.",reverse:["directionDrive"]),
-                .init(id:addLineID,title:"라인 추가",detail:"궤도 라인을 하나 추가합니다. 최대 개수 다음에는 기본 3개로 돌아갑니다.")]
+                .init(id:departureID,title:"출발",detail:"중력점에서 붉은 띠가 태어나 가속합니다. 약 4.5초 뒤 사라집니다."),
+                .init(id:breakthroughID,title:"돌파",detail:"흰 띠 하나가 중력점을 빠져나가며 가속합니다. 약 3.6초 뒤 소멸합니다."),
+                .init(id:addLineID,title:"새 궤도",detail:"새 궤도를 붉은 띠가 그립니다. 약 7초 뒤 강조 띠는 사라지고 낮은 밝기의 궤도만 남습니다. 최대 개수 다음에는 기본 3개로 돌아갑니다."),
+                .init(id:completionID,title:"완료",detail:"움직이던 띠가 감속하고 중력점으로 모이며 사라집니다. 약 4초간의 마무리입니다.")]
+
         ]
         return data.mapValues { list in list.enumerated().map { i,entry in var event=entry;event.cc=event.id == addLineID ? 100 : 96+i;return event } }
     }()

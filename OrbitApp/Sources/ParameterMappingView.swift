@@ -117,13 +117,15 @@ struct ParameterRoutingPopover: View {
     }
     private var eventOutput: Bool { route.output.sendsEvents(spec:spec) }
     private var cueOutput: Bool { route.output.sendsTriggerValue(spec:spec) }
+    private var isPulse: Bool {targetSceneID == PulseOrbitSimulation.sceneID && !targetTextured}
     private var outputTiming: String {
+        if isPulse && PulseOrbitOutputs.isCrossing(key) {return "자연 발생 교차만 6초에 최대 1회 · 버튼·외부 OSC 트리거는 매번 즉시 송신합니다."}
         if route.output.behavior == .trigger {
             if spec.eventOutput {return "교차마다 OSC Float 1.0 한 번"}
             if spec.outputOnly {return "시뮬레이션 값이 바뀔 때마다 OSC Float 1.0 한 번"}
             return "OSC 수신마다 1.0 한 번 · 같은 값·0.0도 트리거합니다. 직접 값 변경도 1회 송신합니다."
         }
-        return cueOutput ? "이벤트마다 OSC Float 1.0 한 번 · 대기 중 송신 없음" : spec.eventOutput ? "교차마다 해당 값을 한 번 송신합니다." : "연속 출력 · 현재 값 전달"
+        return cueOutput ? "이벤트마다 OSC Float 1.0 한 번 · 대기 중 송신 없음" : spec.eventOutput ? "사건마다 해당 값을 한 번 송신합니다." : "연속 출력 · 현재 값 전달"
     }
     private var addsLine: Bool {key == SceneTrigger.addLineID}
     private var currentValue: Double {isLive ? model.controlValue(key) : baseValue}
@@ -198,7 +200,7 @@ struct ParameterRoutingPopover: View {
             }
             if !spec.outputOnly { Picker("매핑 방향",selection:$tab) {Text("입력 · OSC → 영상").tag(0);Text("출력 · 영상 → OSC").tag(1)}
                 .pickerStyle(.segmented).accessibilityIdentifier("routeTab") }
-            else { Text(spec.eventOutput ? "교차가 발생할 때마다 출력 · 입력 매핑 없음" : "시뮬레이션에서 연속 출력 · 입력 매핑 없음").font(.caption).foregroundStyle(.secondary) }
+            else { Text(spec.eventOutput ? "사건에 맞춰 출력 · 입력 매핑 없음" : "시뮬레이션에서 연속 출력 · 입력 매핑 없음").font(.caption).foregroundStyle(.secondary) }
         }
     }
     private var eventSource: Binding<String> {
@@ -244,18 +246,18 @@ struct ParameterRoutingPopover: View {
                     Stepper("최대 \(lineLimit)개",value:Binding(get:{lineLimit},set:{limit in
                         updateRoute {$0.input.lineLimit=limit}
                     }),in:4...PulseOrbitSimulation.maximumLineCount).accessibilityIdentifier("triggerLineLimit")
-                    Text("최대 개수에서 한 번 더 실행하면 3개로 돌아갑니다. 추가한 라인은 유지되며, 처음부터 재생하거나 씬을 다시 선택하면 3개로 시작합니다.")
+                    Text("최대 개수에서 한 번 더 실행하면 3개로 돌아갑니다. 밝은 띠는 재생 시간 7초 후 사라지고 희미한 궤도선은 유지됩니다. 처음부터 재생하거나 씬을 다시 선택하면 3개로 시작합니다.")
                         .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
                 } else {
                 HStack {
                     Text("반응 강도");Slider(value:normalizedInput(\.maximum),in:0...1)
                     Text(String(format:"%.2f",route.input.maximum)).monospacedDigit()
                 }.accessibilityIdentifier("triggerStrength")
-                HStack {
+                if !isPulse { HStack {
                     field("시작 · 초",value:eventSetting(\.attack),id:"routeEventAttack")
                     field("유지 · 초",value:eventSetting(\.hold),id:"routeEventHold")
                     field("소멸 · 초",value:eventSetting(\.release),id:"routeEventRelease")
-                }
+                }} else {Text("띠의 생성·이동·소멸은 위 연출 설명에 따라 자동으로 진행됩니다.").font(.caption).foregroundStyle(.secondary)}
                 }
                 Text("직접 실행은 메인 화면의 이벤트 버튼을 사용합니다.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -342,7 +344,7 @@ struct SceneTriggerButtons: View {
             ForEach(Array(model.sceneTriggers.dropFirst(page*pageSize).prefix(pageSize))) { event in
                 HStack(spacing:5) {
                     Button {model.triggerParameter(event.id)} label:{
-                        Label(event.title,systemImage:"bolt.fill").font(.system(size:11,weight:.semibold))
+                        Label(event.title,systemImage:"bolt.fill").font(.system(size:model.selectedSceneID == PulseOrbitSimulation.sceneID ? 13 : 11,weight:.semibold))
                             .padding(.horizontal,11).frame(height:30).foregroundStyle(.white)
                             .background(orbitAccent,in:RoundedRectangle(cornerRadius:5))
                     }.buttonStyle(.plain).modifier(AcceptFirstClick())

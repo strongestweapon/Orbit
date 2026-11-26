@@ -1,0 +1,66 @@
+{
+  "title": "Polynode: Cycles",
+  "role": "main visual reference for Pulse Orbit",
+  "selectedBy": "user",
+  "savedDate": "2026-11-26",
+  "sourceURL": "https://www.instagram.com/p/DeRU92jDVrC/",
+  "numbering": "Local filenames 01–04 follow the download filename suffix order; Instagram carousel order is not verified.",
+  "files": [
+    {
+      "file": "01-polynode-cycles.mp4",
+      "originalFilename": "Polynode- Cycles has found a new home.Yesterday, EGO, the new exhibition at Light Art Museum Bud.mp4",
+      "sha256": "45ce5c24a51ade6bdec839d7e8fc245607b316d1ff3ac107d30ad499148040b7",
+      "bytes": 853643,
+      "durationSeconds": 15.090113,
+      "video": {
+        "codec_name": "h264",
+        "codec_type": "video",
+        "width": 720,
+        "height": 900,
+        "avg_frame_rate": "29997/1000"
+      }
+    },
+    {
+      "file": "02-polynode-cycles.mp4",
+      "originalFilename": "Polynode- Cycles has found a new home.Yesterday, EGO, the new exhibition at Light Art Museum Bud (1).mp4",
+      "sha256": "0f357ffeb8f606b823a0efc3bf1ce14f7777385cce22d4467977a77efaa46322",
+      "bytes": 1084014,
+      "durationSeconds": 14.765034,
+      "video": {
+        "codec_name": "h264",
+        "codec_type": "video",
+        "width": 720,
+        "height": 900,
+        "avg_frame_rate": "30/1"
+      }
+    },
+    {
+      "file": "03-polynode-cycles.mp4",
+      "originalFilename": "Polynode- Cycles has found a new home.Yesterday, EGO, the new exhibition at Light Art Museum Bud (2).mp4",
+      "sha256": "9f04b3b956dbb632eae1538dbe42bcb6ae2865e83cdfc7740b590d70c23de2e8",
+      "bytes": 3204680,
+      "durationSeconds": 31.181542,
+      "video": {
+        "codec_name": "h264",
+        "codec_type": "video",
+        "width": 720,
+        "height": 900,
+        "avg_frame_rate": "29997/1000"
+      }
+    },
+    {
+      "file": "04-polynode-cycles.mp4",
+      "originalFilename": "Polynode- Cycles has found a new home.Yesterday, EGO, the new exhibition at Light Art Museum Bud (3).mp4",
+      "sha256": "faafe60dc0aac474c3d7b22794d2b17aab2bdba632fb43fa9ac0ec3500de5813",
+      "bytes": 714836,
+      "durationSeconds": 23.356417,
+      "video": {
+        "codec_name": "h264",
+        "codec_type": "video",
+        "width": 720,
+        "height": 900,
+        "avg_frame_rate": "14999/500"
+      }
+    }
+  ]
+}

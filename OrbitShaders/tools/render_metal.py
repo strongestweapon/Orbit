@@ -45,6 +45,7 @@ class MetalRenderer:
                      rhythmRate=params['motion1'],counterflow=params['motion3']>=0.5,
                      clustering=params['orbit0'],laneRates=[params['orbit1'],params['orbit2'],params['orbit3']],
                      outerReverse=params['orbit4']>=0.5,linkRange=params['link0'],density=params['shape2'],lineCount=int(params.get('lineCount',3)))
+        if 'accentKind' in params: request.update(accentKind=int(params['accentKind']),accentTime=params.get('accentTime',0))
         self.pulse_probe.stdin.write(json.dumps(request)+'\n');self.pulse_probe.stdin.flush()
         return json.loads(self.pulse_probe.stdout.readline())
 

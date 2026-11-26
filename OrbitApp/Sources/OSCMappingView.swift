@@ -49,7 +49,7 @@ struct MappingRow: Identifiable {
             return global.triggerMode == .threshold ? Self.thresholdLabel(global.threshold ?? .init()) : "≥ 0.5 수신마다 1회"
         }
         guard let spec,let route else {return ""}
-        if spec.outputOnly {return spec.eventOutput ? "실제 교차가 발생할 때마다 1회" : "시뮬레이션 연속값 0.0–1.0"}
+        if spec.outputOnly {return spec.eventOutput ? "실제 사건에 맞춰 1회" : "시뮬레이션 연속값 0.0–1.0"}
         if spec.isTrigger {
             let extra=route.input.behavior == .threshold ? Self.thresholdLabel(route.input.eventSettings.threshold) : "≥ 0.5 수신마다 1회"
             if route.input.receivesDirectOSC && route.input.enabled && route.input.sourceParameter != nil && route.input.behavior == .threshold {return "직접 ≥ 0.5 수신마다 1회\n영상 값: "+extra}
@@ -63,8 +63,11 @@ struct MappingRow: Identifiable {
         let cue=output.sendsTriggerValue(spec:spec)
         let range=cue ? "1.0"
             : "\(Self.number(output.minimum)) → \(Self.number(output.maximum))"
+        if sceneID == PulseOrbitSimulation.sceneID && !textured && PulseOrbitOutputs.isCrossing(spec.id) {
+            return "OSC Float \(range) · 자연 교차 6초에 최대 1회"+(output.enabled ? "" : " (꺼짐)")
+        }
         let timing=output.behavior == .trigger
-            ? (spec.outputOnly ? (spec.eventOutput ? "교차마다 트리거" : "값 변경마다 트리거") : "입력마다 트리거")
+            ? (spec.outputOnly ? (spec.eventOutput ? "사건마다 트리거" : "값 변경마다 트리거") : "입력마다 트리거")
             : output.sendsEvents(spec:spec) ? "1회" : "연속"
         return "OSC Float \(range) · \(timing)"+(output.enabled ? "" : " (꺼짐)")
     }
@@ -379,7 +382,7 @@ private struct OSCMappingCard: View {
                 OSCMapAddressField(value:output(\.address),identifier:"mapOutputAddress_"+row.id)
                 HStack(spacing:6) {
                     if route.sendsTriggerValue(spec:spec) {
-                        Text(route.behavior == .trigger ? (spec.outputOnly ? (spec.eventOutput ? "교차마다 Float 1.0 · 1회" : "값 변경마다 Float 1.0 · 1회") : "입력마다 Float 1.0 · 1회") : "이벤트마다 Float 1.0 · 1회")
+                        Text(route.behavior == .trigger ? (spec.outputOnly ? (spec.eventOutput ? "사건마다 Float 1.0 · 1회" : "값 변경마다 Float 1.0 · 1회") : "입력마다 Float 1.0 · 1회") : "이벤트마다 Float 1.0 · 1회")
                             .font(.system(size:11)).foregroundStyle(.secondary)
                             .help(row.outputRangeLabel ?? "")
                     } else {
@@ -387,13 +390,16 @@ private struct OSCMappingCard: View {
                         numberField("최소",value:output(\.minimum),id:"mapOutputMin_"+row.id)
                         Text("→").foregroundStyle(.secondary)
                         numberField("최대",value:output(\.maximum),id:"mapOutputMax_"+row.id)
-                        if spec.eventOutput {Text("교차마다").font(.system(size:11)).foregroundStyle(.secondary)}
+                        if spec.eventOutput {Text("사건마다").font(.system(size:11)).foregroundStyle(.secondary)}
                     }
                     Spacer(minLength:0)
                     Button("송신 테스트") {model.testControlOutput(key)}
                         .controlSize(.small).disabled(!row.active || issue != nil)
                         .accessibilityIdentifier("mapOutputTest_"+row.id)
                         .help(row.active ? "이 출력만 한 번 보냅니다. 송신 체크 상태는 바뀌지 않습니다." : "이 씬을 재생할 때 송신 테스트를 사용할 수 있습니다.")
+                }
+                if scene == PulseOrbitSimulation.sceneID && !row.textured && PulseOrbitOutputs.isCrossing(spec.id) {
+                    Text("자연 교차만 6초에 최대 1회 · 버튼·OSC 입력은 매번 송신").font(.system(size:11)).foregroundStyle(.secondary)
                 }
                 if let issue {Text(issue).font(.caption).foregroundStyle(.orange)}
             }

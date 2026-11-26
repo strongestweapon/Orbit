@@ -28,6 +28,24 @@ import AppKit
         precondition(!initial.contains {$0.sceneID==pulse && $0.textured},"Phantom texture controls")
         precondition(!initial.contains {$0.globalID == nil && $0.configured},"Defaults are not configured connections")
 
+        // The shipped OSC reference must match the real catalog, addresses and defaults.
+        let referenceURL=resources.resourceURL!.appendingPathComponent("config/osc-mappings.example.json")
+        let reference=try JSONSerialization.jsonObject(with:Data(contentsOf:referenceURL)) as! [String:Any]
+        precondition(reference["schemaVersion"] as? Int == 2)
+        let documented=reference["controls"] as! [[String:Any]]
+        precondition(documented.count==initial.filter {$0.globalID==nil}.count)
+        for item in documented {
+            let scene=item["scene"] as! String,key=item["id"] as! String,textured=item["source"] as! String == "original"
+            let actual=row(scene,key,textured)
+            precondition(actual.title==item["title"] as? String)
+            precondition(actual.route!.output.address==item["outputAddress"] as? String)
+            if actual.spec!.outputOnly {precondition(item["inputAddress"] is NSNull)}
+            else {precondition(model.inputOSCAddress(key,sceneID:scene,textured:textured)==item["inputAddress"] as? String)}
+        }
+        let globalReference=reference["global"] as! [[String:Any]]
+        precondition(Set(globalReference.map {$0["inputAddress"] as! String})==Set(model.globalOSC.map(\.address)))
+        precondition(!documented.contains {$0["scene"] as? String == pulse && ["trigger.orbitPulse","trigger.gravityImpact","trigger.orbitReverse","pulseLength","lineWidth"].contains($0["id"] as! String)})
+
         // A shared filter must retain both directions of a continuous-in/trigger-out route.
         precondition(row(pulse,"inertia").matchesSignalType(1) && !row(pulse,"inertia").matchesSignalType(2))
         model.setRoute("inertia") {$0.output.mode = .trigger}

@@ -1,117 +1,153 @@
 import Foundation
 
 @main struct PulseOrbitChecks {
-    static func advance(_ sim: inout PulseOrbitSimulation, seconds: Double, fps: Int = 60,
-                        drive: Double = 0.72, gravity: Double = 0, inertia: Double = 0.55, center: Double = 0,
-                        dynamics: Double = 0, counterflow: Bool = false) {
-        for _ in 0..<Int(seconds * Double(fps)) {
-            sim.advance(by: 1 / Double(fps), controls: .init(drive:drive, attraction:gravity, inertia:inertia, center:center,
-                                                          dynamics:dynamics,counterflow:counterflow,clustering:0,outerReverse:false))
-        }
+    static let normal=PulseOrbitSimulation.Controls(drive:0.78,attraction:0.12,inertia:0.55,center:0.15,
+        dynamics:0.82,rhythmRate:0.58,counterflow:true,clustering:0.72,laneRates:[0.30,0.39,0.24],outerReverse:false,density:0.65)
+    static func advance(_ sim: inout PulseOrbitSimulation,seconds:Double,fps:Int=60,
+                        controls:PulseOrbitSimulation.Controls=normal) {
+        for _ in 0..<Int((seconds*Double(fps)).rounded()) {sim.advance(by:1/Double(fps),controls:controls)}
+    }
+    static func snapshot(_ sim:PulseOrbitSimulation)->[Float] {
+        var state=[Float](repeating:0,count:PulseOrbitSimulation.uniformCount)
+        sim.writeState(to:&state);return state
     }
     static func main() {
-        var clockwise = PulseOrbitSimulation(), counter = PulseOrbitSimulation()
-        advance(&clockwise, seconds:10, drive:1)
-        advance(&counter, seconds:10, drive:0)
-        precondition(clockwise.velocities.allSatisfy { $0 > 0 })
-        precondition(counter.velocities.allSatisfy { $0 < 0 })
-        var fast = clockwise, slow = clockwise
-        advance(&fast, seconds:1, drive:0, inertia:0)
-        advance(&slow, seconds:1, drive:0, inertia:1)
-        precondition(fast.velocities.allSatisfy { $0 < 0 })
-        precondition(slow.velocities.allSatisfy { $0 > 0 }, "Inertia must preserve prior motion before reversing")
-        advance(&slow, seconds:15, drive:0, inertia:1)
-        precondition(slow.velocities.allSatisfy { $0 < 0 })
-        var gathered = PulseOrbitSimulation()
-        advance(&gathered, seconds:90, drive:0.5, gravity:1, inertia:0.4, center:0.25)
-        precondition(gathered.positions.allSatisfy { abs($0 - 0.25) < 0.001 }, "Attraction must converge from both directions")
-        precondition(gathered.velocities.allSatisfy { abs($0) < 0.0001 })
-        var lowFPS = PulseOrbitSimulation(), highFPS = PulseOrbitSimulation()
-        advance(&lowFPS, seconds:20, fps:30, gravity:0.3, dynamics:0.85,counterflow:true)
-        advance(&highFPS, seconds:20, fps:180, gravity:0.3, dynamics:0.85,counterflow:true)
-        precondition(zip(lowFPS.uniforms,highFPS.uniforms).allSatisfy { abs($0 - $1) < 0.00001 }, "Render count must not change motion")
-        let paused = lowFPS.uniforms
-        lowFPS.advance(by:0, controls:.init(drive:0,attraction:1,inertia:0,center:1))
-        precondition(paused == lowFPS.uniforms)
-        precondition(PulseOrbitSimulation(uniforms:[Float](repeating:0,count:24)+paused).uniforms == paused)
-        var snapshot = [Float](repeating:0,count:24) + lowFPS.uniforms + [0,1,0,Float(lowFPS.time),0.85,0.55,0.65,1]
-        var resumed = PulseOrbitSimulation(uniforms:snapshot)
-        advance(&lowFPS,seconds:5,gravity:0.3,dynamics:0.85,counterflow:true)
-        advance(&resumed,seconds:5,gravity:0.3,dynamics:0.85,counterflow:true)
-        precondition(zip(lowFPS.uniforms,resumed.uniforms).allSatisfy { abs($0-$1)<0.00001 }, "Benchmark must resume rhythm and physics from the same clock")
-        // New state includes event history and fractional fixed-step time.
-        var fusion = PulseOrbitSimulation()
-        let fusionControls = PulseOrbitSimulation.Controls(drive:0.8,attraction:0.1,inertia:0.4,center:0)
-        for _ in 0..<720 { fusion.advance(by:1.0/60,controls:fusionControls) }
-        precondition(fusion.eventStrengths.contains { $0 > 0 }, "Opposing orbits must actually cross")
-        fusion.advance(by:0.003,controls:fusionControls)
-        var full = [Float](repeating:0,count:PulseOrbitSimulation.uniformCount)
-        fusion.writeState(to:&full)
-        var copy = PulseOrbitSimulation(uniforms:full)
-        for _ in 0..<120 {
-            fusion.advance(by:1.0/60,controls:fusionControls)
-            copy.advance(by:1.0/60,controls:fusionControls)
+        // Even extreme controls retain a bounded current. Only commands can
+        // amplify it into an energetic performance.
+        var idle=PulseOrbitSimulation()
+        let resting=idle.positions
+        for control in [normal,.init(drive:1,attraction:1,inertia:0,center:0.81),
+                        .init(drive:0,attraction:0.8,inertia:1,center:0.05)] {
+            for _ in 0..<1200 {
+                idle.advance(by:0.25,controls:control)
+                precondition(idle.velocities.allSatisfy {abs($0)<0.36})
+                precondition(idle.takeCrossings().isEmpty && idle.motionEnergy==0 && idle.proximity==0)
+            }
         }
-        precondition(zip(fusion.uniforms,copy.uniforms).allSatisfy { abs($0-$1)<0.00002 })
-        precondition(zip(fusion.eventUniforms,copy.eventUniforms).allSatisfy { abs($0-$1)<0.00002 }, "Benchmark must preserve recent crossing flashes")
-        var at30=PulseOrbitSimulation(),at180=PulseOrbitSimulation()
-        for _ in 0..<600 { at30.advance(by:1.0/30,controls:fusionControls) }
-        for _ in 0..<3600 { at180.advance(by:1.0/180,controls:fusionControls) }
-        precondition(at30.uniforms==at180.uniforms && zip(at30.eventUniforms,at180.eventUniforms).allSatisfy { abs($0-$1)<0.0000001 }, "Frame rates may differ only by floating-point remainder rounding")
-        precondition(PulseOrbitSimulation.crossed(from:-0.002,to:0.002,threshold:0.05))
-        precondition(PulseOrbitSimulation.crossed(from:0.002,to:0,threshold:0.05))
-        precondition(!PulseOrbitSimulation.crossed(from:0,to:0.002,threshold:0.05))
-        precondition(!PulseOrbitSimulation.crossed(from:0.499,to:-0.499,threshold:0.05), "Antipode wrap must not flash")
-        // A genuine alignment crossing twelve o'clock must not be lost at the seam.
-        var seed = [Float](repeating:0,count:PulseOrbitSimulation.uniformCount)
-        PulseOrbitSimulation().writeState(to:&seed)
-        seed[24]=0.999;seed[32]=0.001;seed[36]=0.3;seed[44] = -0.3
-        var seam=PulseOrbitSimulation(uniforms:seed)
-        seam.advance(by:1.0/60,controls:.init(drive:1,attraction:0,inertia:0.5,center:0,dynamics:0,clustering:0))
-        precondition(seam.eventTimes[0]>0 && seam.eventStrengths[0]>0)
-        precondition(abs(PulseOrbitSimulation.wrapped(seam.eventAngles[0]))<0.002)
-        let stopped = fusion.positions
-        fusion.advance(by:0.2,controls:.init(drive:1,attraction:1,inertia:0,center:0,laneRates:[0,0,0]))
-        precondition(fusion.positions==stopped && fusion.velocities.allSatisfy { $0==0 })
-        snapshot[52]=0.31;snapshot[53]=0.72;snapshot[55]=0
-        let controls=PulseOrbitSimulation.Controls(uniforms:snapshot)
-        precondition(abs(controls.dynamics-0.31)<0.00001 && abs(controls.rhythmRate-0.72)<0.00001 && !controls.counterflow)
-        var rhythmic = PulseOrbitSimulation()
-        var speeds:[Double]=[]
-        for _ in 0..<24 {
-            advance(&rhythmic,seconds:1,drive:1,dynamics:1,counterflow:true)
-            speeds.append(rhythmic.velocities[0])
+        precondition(idle.time>899 && idle.positions != resting,"Quiet current must move without an autoplay burst")
+        for kind in [PulseOrbitSimulation.AccentKind.departure,.breakthrough,.newOrbit,.completion] {
+            var sim=PulseOrbitSimulation()
+            advance(&sim,seconds:30)
+            let initial=sim.uniforms
+            let event=sim.accent(kind,controls:normal)
+            let paused=snapshot(sim)
+            sim.advance(by:0,controls:normal)
+            precondition(snapshot(sim)==paused,"Pause freezes event age and all positions")
+            advance(&sim,seconds:1)
+            precondition(sim.motionEnergy>0.9 && sim.uniforms != initial,"A command must wake the background")
+            precondition(abs(PulseOrbitSimulation.wrapped(sim.accents[0].angle-event.origin))>0.001,"Each accent must move")
+            advance(&sim,seconds:event.duration+0.5)
+            precondition(sim.accents.isEmpty && sim.motionEnergy==0 && sim.velocities.allSatisfy {abs($0)<0.21})
+            let settled=sim.uniforms
+            for _ in 0..<3600 {
+                sim.advance(by:1.0/60,controls:normal)
+                precondition(sim.velocities.allSatisfy {abs($0)<0.21} && sim.takeCrossings().isEmpty,"Expired commands must return to quiet current without sound cues")
+            }
+            precondition(sim.uniforms != settled,"Resting current must not be a frozen image")
         }
-        precondition(speeds.max()! > speeds.min()!*2, "Packets must accelerate and brake, not drift at a fixed speed")
-        precondition(rhythmic.velocities[0]>0 && rhythmic.velocities[4]<0 && rhythmic.velocities[8]>0)
-        var stall = clockwise
-        stall.advance(by:1e10,controls:.init(drive:1,attraction:1,inertia:0,center:0))
-        precondition(stall.uniforms.allSatisfy(\.isFinite) && stall.positions.allSatisfy { (0..<1).contains($0) })
-        precondition(PulseOrbitSimulation().uniforms == PulseOrbitSimulation().uniforms)
+        // Direction, gravity and inertia still govern motion during an event.
+        let cw=PulseOrbitSimulation.Controls(drive:1,attraction:0,inertia:0.55,center:0,counterflow:false,clustering:0,outerReverse:false)
+        let ccw=PulseOrbitSimulation.Controls(drive:0,attraction:0,inertia:0.55,center:0,counterflow:false,clustering:0,outerReverse:false)
+        var clockwise=PulseOrbitSimulation(),counter=PulseOrbitSimulation()
+        clockwise.accent(.newOrbit,controls:cw);counter.accent(.newOrbit,controls:ccw)
+        advance(&clockwise,seconds:2,controls:cw);advance(&counter,seconds:2,controls:ccw)
+        precondition(clockwise.velocities.allSatisfy {$0>0} && counter.velocities.allSatisfy {$0<0})
+        var fast=clockwise,slow=clockwise,fastControl=ccw,slowControl=ccw
+        fastControl.inertia=0;slowControl.inertia=1
+        advance(&fast,seconds:1,controls:fastControl);advance(&slow,seconds:1,controls:slowControl)
+        precondition(fast.velocities.allSatisfy {$0<0} && slow.velocities.allSatisfy {$0>0},"Inertia must delay reversal")
+        let gravity=PulseOrbitSimulation.Controls(drive:0.5,attraction:1,inertia:0.4,center:0.25,clustering:0)
+        var gathered=PulseOrbitSimulation()
+        for _ in 0..<15 {gathered.accent(.newOrbit,controls:gravity);advance(&gathered,seconds:4,controls:gravity)}
+        precondition(gathered.positions.allSatisfy {abs($0-0.25)<0.001},"Active gravity converges from both sides")
+        var low=PulseOrbitSimulation(),high=PulseOrbitSimulation()
+        for simKind in [PulseOrbitSimulation.AccentKind.departure,.newOrbit,.completion] {
+            low.accent(simKind,controls:normal);high.accent(simKind,controls:normal)
+            advance(&low,seconds:2,fps:30);advance(&high,seconds:2,fps:180)
+        }
+        precondition(zip(low.uniforms,high.uniforms).allSatisfy {abs($0-$1)<0.00001})
+        low.advance(by:0.003,controls:normal)
+        var resumed=PulseOrbitSimulation(uniforms:snapshot(low))
+        advance(&low,seconds:1,fps:30);advance(&resumed,seconds:1,fps:180)
+        precondition(zip(low.uniforms,resumed.uniforms).allSatisfy {abs($0-$1)<0.00002})
+        precondition(zip(low.accentUniforms,resumed.accentUniforms).allSatisfy {abs($0-$1)<0.00002})
+        precondition(zip(low.traceUniforms,resumed.traceUniforms).allSatisfy {abs($0-$1)<0.0002})
+        advance(&low,seconds:15);advance(&resumed,seconds:15)
+        precondition(low.motionEnergy==0 && resumed.motionEnergy==0)
+        var repeated=PulseOrbitSimulation()
+        for _ in 0..<20 {repeated.accent(.departure,controls:normal)}
+        precondition(repeated.accents.count==20 && Set(repeated.accents.map(\.radius)).count==20)
+        precondition(Set(repeated.accents.map(\.direction)).count==2)
+        advance(&repeated,seconds:1)
+        precondition(Set(repeated.accents.map(\.angle)).count==20)
+        let restored=PulseOrbitSimulation(uniforms:snapshot(repeated))
+        precondition(zip(restored.accentUniforms,repeated.accentUniforms).allSatisfy {abs($0-$1)<0.00001})
+        for _ in 0..<100 {repeated.accent(.breakthrough,controls:normal);precondition(repeated.accents.count<=24)}
+        advance(&repeated,seconds:8)
+        let settled=repeated.positions
+        advance(&repeated,seconds:30)
+        precondition(repeated.accents.isEmpty && repeated.positions != settled && repeated.velocities.allSatisfy {abs($0)<0.21},"After the burst only a quiet current remains")
+        var staggered=PulseOrbitSimulation()
+        staggered.accent(.departure,controls:normal);advance(&staggered,seconds:3)
+        staggered.accent(.breakthrough,controls:normal);advance(&staggered,seconds:2)
+        precondition(staggered.accents.count==1 && staggered.motionEnergy>0,"A newer event survives the older one's expiry")
+        advance(&staggered,seconds:2);precondition(staggered.motionEnergy==0)
         var expanded=PulseOrbitSimulation()
-        advance(&expanded,seconds:2)
-        let oldPositions=expanded.positions,oldClock=expanded.time
-        for expected in 4...10 {
-            expanded.addLine()
-            precondition(expanded.lineCount==expected && expanded.positions.count==expected*4)
-            precondition(Array(expanded.positions.prefix(12))==oldPositions && expanded.time==oldClock)
-            precondition(expanded.takeCrossings().isEmpty,"Adding lines must not emit phantom crossings")
-        }
-        var expandedSnapshot=[Float](repeating:0,count:PulseOrbitSimulation.uniformCount)
-        expanded.writeState(to:&expandedSnapshot)
-        precondition(expandedSnapshot.count==171 && expandedSnapshot[PulseOrbitSimulation.lineCountOffset]==10)
-        var expandedCopy=PulseOrbitSimulation(uniforms:expandedSnapshot)
-        advance(&expanded,seconds:4);advance(&expandedCopy,seconds:4)
-        precondition(zip(expanded.positions,expandedCopy.positions).allSatisfy {abs($0-$1)<0.00002})
-        precondition(expanded.velocities.count==40 && expanded.velocities.allSatisfy {$0>0})
+        for expected in 4...10 {expanded.addLine();precondition(expanded.lineCount==expected)}
+        let expandedCopy=PulseOrbitSimulation(uniforms:snapshot(expanded))
+        precondition(expandedCopy.positions==expanded.positions.map {Double(Float($0))})
         expanded.addLine();precondition(expanded.lineCount==3)
         expanded.addLine(limit:4);precondition(expanded.lineCount==4)
         expanded.addLine(limit:4);precondition(expanded.lineCount==3)
-        var many30=PulseOrbitSimulation(),many180=PulseOrbitSimulation()
-        many30.setLineCount(10);many180.setLineCount(10)
-        advance(&many30,seconds:10,fps:30,gravity:0.3,dynamics:0.85,counterflow:true)
-        advance(&many180,seconds:10,fps:180,gravity:0.3,dynamics:0.85,counterflow:true)
-        precondition(zip(many30.positions,many180.positions).allSatisfy {abs($0-$1)<0.00001})
-        print("PASS: clockwise/counterclockwise, inertial reversal, attraction convergence, rhythmic acceleration, counterflow, 30/180 FPS equivalence, pause, resumable simulation clock, bounded catch-up, clustering, per-lane stop, true crossings, antipode rejection, seam events and event snapshot resume, 3–10 line cycling, state preservation, expanded snapshot and FPS equivalence")
+        var stopped=clockwise
+        let beforeStop=stopped.positions
+        stopped.advance(by:0.2,controls:.init(drive:1,attraction:1,inertia:0,center:0,laneRates:[0,0,0]))
+        precondition(stopped.positions==beforeStop && stopped.velocities.allSatisfy {$0==0})
+        precondition(PulseOrbitSimulation.crossed(from:-0.002,to:0.002,threshold:0.05))
+        precondition(!PulseOrbitSimulation.crossed(from:0.499,to:-0.499,threshold:0.05))
+        precondition(!PulseOrbitSimulation.crossed(from:0,to:0.002,threshold:0.05))
+        var gate=PulseCueGate()
+        precondition(gate.accept(at:10) && !gate.accept(at:15.99) && gate.accept(at:16))
+        let restingControl=PulseOrbitSimulation.Controls(drive:0.5,attraction:0,inertia:0.55,center:0.15)
+        var noTriggers=PulseOrbitSimulation()
+        for frame in 0..<3600 {
+            let v=Double(frame%120)/119
+            let controls=PulseOrbitSimulation.Controls(drive:v,attraction:1-v,inertia:v,center:v,density:v)
+            noTriggers.advance(by:1.0/60,controls:controls)
+            precondition(noTriggers.traces.isEmpty,"Neither continuous inputs nor passages may create perpendicular marks")
+        }
+        var fixed=PulseOrbitSimulation()
+        fixed.accent(.departure,controls:normal)
+        var changed=fixed
+        advance(&fixed,seconds:2,controls:normal)
+        advance(&changed,seconds:2,controls:.init(drive:0,attraction:1,inertia:0,center:0.8,density:0))
+        precondition(fixed.traceUniforms==changed.traceUniforms,"All five continuous controls must leave an existing mark unchanged")
+        fixed.accent(.completion,controls:normal);changed.accent(.completion,controls:normal)
+        advance(&fixed,seconds:1,controls:normal)
+        advance(&changed,seconds:1,controls:.init(drive:1,attraction:0,inertia:1,center:0.6,density:1))
+        precondition(fixed.traceUniforms==changed.traceUniforms,"Completion captures its target instead of following a continuous parameter")
+        for kind in [PulseOrbitSimulation.AccentKind.departure,.breakthrough,.newOrbit] {
+            var mark=PulseOrbitSimulation()
+            mark.accent(kind,controls:normal)
+            precondition(mark.traces.count==1)
+            let lifetime=mark.traces[0].duration
+            advance(&mark,seconds:lifetime-0.1)
+            precondition(mark.traces.count==1)
+            advance(&mark,seconds:0.2)
+            precondition(mark.traces.isEmpty,"Every triggered mark must expire independently")
+        }
+        var commanded=PulseOrbitSimulation()
+        for _ in 0..<20 {commanded.accent(.departure,controls:restingControl)}
+        precondition(commanded.traces.count==16 && commanded.accents.count==20,"Rapid commands retain independent bounded memories and accent voices")
+        advance(&commanded,seconds:1,controls:restingControl)
+        commanded.accent(.completion,controls:restingControl)
+        precondition(commanded.traces.filter {$0.releaseStart>=0}.count==4)
+        advance(&commanded,seconds:2.5,controls:restingControl)
+        precondition(commanded.traces.count==12,"Completion releases only its selected nearby memories")
+        advance(&commanded,seconds:8,controls:restingControl)
+        precondition(commanded.traces.isEmpty)
+        print("PASS: trigger-only perpendicular marks, no continuous-control coupling, captured completion target, independent expiry, 16-mark bound and snapshot continuity")
+        print("PASS: 15 minutes of bounded quiet drift; all four commands accelerate then return to slow current; no spontaneous crossing cues")
+        print("PASS: event-driven direction/gravity/inertia, pause/snapshot/30–180 FPS, 20 separate rapid voices, 24-voice bound, overlapping lifetimes, 3–10 lines and no backlog")
     }
 }

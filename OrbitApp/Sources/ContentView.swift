@@ -190,6 +190,14 @@ struct ContentView: View {
             HStack(spacing:10) {
                 Text(model.selectedScene?.testScene == true ? "LED TEST" : (model.usesTexture ? "원본 재생 조절" : "\(model.selectedScene?.name ?? "") · 연속값 \(model.shaderParameters.count)개"))
                     .font(.system(size:11,weight:.semibold)).accessibilityIdentifier("sceneParameterCount")
+                if model.selectedSceneID == PulseOrbitSimulation.sceneID && !model.usesTexture {
+                    TimelineView(.periodic(from:.now,by:0.2)) { _ in
+                        Text(model.pulseAccentCount > 0 ? "트리거 반응 중" : "기본 흐름 · 트리거 대기")
+                            .font(.system(size:11)).foregroundStyle(.secondary)
+                            .help("수직선은 출발·돌파·새 궤도 트리거마다 생겼다가 정해진 수명 뒤 사라집니다. 완료는 주변 수직선을 모아 지웁니다. 연속값 변경으로는 생성되지 않습니다.")
+                            .accessibilityIdentifier("attractorLegend")
+                    }
+                }
                 Spacer()
                 if model.selectedScene?.testScene == false {
                     Button {model.resetSceneAppearance()} label:{Label("초기값 복원",systemImage:"arrow.counterclockwise")}
@@ -219,6 +227,17 @@ struct ContentView: View {
                     MappedParameterSlider(model:model,key:"brightness",title:"밝기")
                     MappedParameterSlider(model:model,key:"energy",title:"발광")
                 }
+            } else if model.selectedSceneID == PulseOrbitSimulation.sceneID {
+                GeometryReader { geometry in
+                    let available=max(0,geometry.size.width-41)
+                    HStack(alignment:.top,spacing:20) {
+                        pulseControlGroup("상태 · 모임과 활동",keys:["attraction","pulseDensity"])
+                            .frame(width:available*0.4)
+                        Divider().frame(width:1,height:68)
+                        pulseControlGroup("움직임 · 힘과 위치",keys:["directionDrive","inertia","attractorPosition"])
+                            .frame(width:available*0.6)
+                    }
+                }.frame(height:68)
             } else if groupedControls {
                 groupedParameterControls
             } else {
@@ -233,6 +252,16 @@ struct ContentView: View {
                 SceneTriggerButtons(model:model)
             }
         }.padding(.horizontal,20).padding(.vertical,12).background(orbitPanel)
+    }
+    private func pulseControlGroup(_ title:String,keys:[String]) -> some View {
+        VStack(alignment:.leading,spacing:8) {
+            Text(title).font(.system(size:12,weight:.semibold)).foregroundStyle(.secondary)
+            HStack(spacing:22) {
+                ForEach(keys,id:\.self) { key in
+                    MappedParameterSlider(model:model,key:key,title:model.parameterSpec(key).title)
+                }
+            }
+        }.frame(maxWidth:.infinity)
     }
     // Section navigation stays visible; the shared pane keeps the preview and
     // trigger buttons stationary while using full-size labels and sliders.

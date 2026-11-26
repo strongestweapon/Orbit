@@ -118,6 +118,10 @@ final class OrbitModel: ObservableObject {
     private var phaseTime: Double = 0
     private var pulseOrbit = PulseOrbitSimulation()
     private var lastPulseCrossing: PulseOrbitSimulation.Crossing?
+    private var pulseCueGate = PulseCueGate()
+    private(set) var lastPulseAccentAngle = 0.0
+    private(set) var lastPulseAccentStrength = 0.0
+    var pulseAccentCount: Int {pulseOrbit.accents.count}
     private(set) var pulseCrossingCount = 0
     private var lastTime = CACurrentMediaTime()
     private var parameterResolver = ParameterResolver()
@@ -175,7 +179,8 @@ final class OrbitModel: ObservableObject {
     func triggers(for sceneID: String, textured: Bool) -> [SceneTrigger] {
         guard let scene=scenes.first(where:{$0.id==sceneID}),!scene.testScene else {return []}
         let routes=(textured ? settings[sceneID]?.textureParameterRoutes : settings[sceneID]?.parameterRoutes) ?? [:]
-        return SceneTrigger.catalog(scene:sceneID,textured:textured)+SceneTrigger.converted(routes:routes,specs:continuousSpecs(scene:scene,textured:textured))
+        let catalog=SceneTrigger.catalog(scene:sceneID,textured:textured)
+        return sceneID == PulseOrbitSimulation.sceneID && !textured ? catalog : catalog+SceneTrigger.converted(routes:routes,specs:continuousSpecs(scene:scene,textured:textured))
     }
     var sceneTriggers: [SceneTrigger] {triggers(for:selectedSceneID,textured:usesTexture)}
     func specs(for sceneID: String, textured: Bool) -> [ParameterSpec] {
@@ -420,6 +425,8 @@ final class OrbitModel: ObservableObject {
             case PulseOrbitOutputs.angle: return lastPulseCrossing?.angle ?? 0
             case PulseOrbitOutputs.strength: return lastPulseCrossing?.strength ?? 0
             case PulseOrbitOutputs.proximity: return pulseOrbit.proximity
+            case PulseOrbitOutputs.accentAngle: return lastPulseAccentAngle
+            case PulseOrbitOutputs.accentStrength: return lastPulseAccentStrength
             default: break
             }
         }
@@ -489,6 +496,7 @@ final class OrbitModel: ObservableObject {
         parameterEvents.reset()
         phaseTime = 0; lastTime = CACurrentMediaTime()
         pulseOrbit = PulseOrbitSimulation()
+        pulseCueGate = PulseCueGate();lastPulseAccentAngle=0;lastPulseAccentStrength=0
         lastPulseCrossing = nil; pulseCrossingCount = 0
         telemetry.updateTime(0,force:true)
         comparison.invalidatePosition()
@@ -599,7 +607,8 @@ final class OrbitModel: ObservableObject {
         if route.transport == .osc,let issue=oscOutputDestination.validationError {return issue}
         if let issue = route.validationError { return issue }
         let routes=(textured ? settings[sceneID]?.textureParameterRoutes : settings[sceneID]?.parameterRoutes) ?? [:]
-        if let other = routes.first(where: { $0.key != key && $0.value.output.enabled && oscOutputDestination.applying(to:$0.value.output).destinationKey == route.destinationKey }) {
+        let validKeys=Set(specs(for:sceneID,textured:textured).map(\.id))
+        if let other = routes.first(where: { validKeys.contains($0.key) && $0.key != key && $0.value.output.enabled && oscOutputDestination.applying(to:$0.value.output).destinationKey == route.destinationKey }) {
             return "\(parameterSpec(other.key,sceneID:sceneID,textured:textured).title)와 출력 주소가 겹칩니다. OSC 주소를 바꾸세요."
         }
         return nil
@@ -656,6 +665,8 @@ final class OrbitModel: ObservableObject {
             guard !spec.isTrigger,!spec.outputOnly,route.behavior == .trigger,route.enabled,outputIssue(for:key)==nil else {return nil}
             return .init(id:controlEmissionID(key),route:route,value:1)
         }
+        // Each external packet is an explicit cue. Only spontaneous crossings
+        // use the quiet-scene rate limit; never discard user/sensor commands.
         if !emissions.isEmpty {controlOutput.sendEvents(emissions)}
     }
     /// Output-only continuous simulation sources have no input packets. Emit on
@@ -680,22 +691,58 @@ final class OrbitModel: ObservableObject {
     func triggerLevels() -> [String:Double] {
         let events=sceneTriggers
         let routes=Dictionary(uniqueKeysWithValues:events.map {($0.id,activeRoutes[$0.id] ?? ParameterRoute.defaults(scene:selectedSceneID,parameter:$0.id,spec:$0.spec))})
+        if selectedSceneID == PulseOrbitSimulation.sceneID,!usesTexture {
+            return Dictionary(uniqueKeysWithValues:events.map { event in
+                let level=pulseOrbit.accents.filter {$0.kind==pulseAccentKind(event.id)}.map { accent in
+                    max(0, min(1, (accent.duration-(pulseOrbit.time-accent.start))/1.2))*accent.strength
+                }.max() ?? 0
+                return (event.id,level)
+            })
+        }
         return parameterEvents.apply(Dictionary(uniqueKeysWithValues:events.map {($0.id,0.0)}),routes:routes,specs:events.map(\.spec),at:CACurrentMediaTime())
     }
     /// Trigger IDs are commands, never writable continuous controls.
     func triggerParameter(_ key: String) {
         let spec=parameterSpec(key),route=route(for:key)
         guard selectedScene?.testScene == false,spec.isTrigger,!isShuttingDown else { return }
-        if key == SceneTrigger.addLineID, selectedSceneID == PulseOrbitSimulation.sceneID, !usesTexture {
-            pulseOrbit.addLine(limit:pulseLineLimit);lastPulseCrossing=nil
+        if selectedSceneID == PulseOrbitSimulation.sceneID,!usesTexture,
+           let kind=pulseAccentKind(key) {
+            if key == SceneTrigger.addLineID {pulseOrbit.addLine(limit:pulseLineLimit);lastPulseCrossing=nil}
+            let accent=pulseOrbit.accent(kind,controls:.init(drive:Double(value("directionDrive")),attraction:Double(value("attraction")),
+                               inertia:Double(value("inertia")),center:Double(value("attractorPosition")),density:Double(value("pulseDensity"))),strength:route.input.maximum)
+            lastPulseAccentAngle=accent.origin;lastPulseAccentStrength=accent.strength
         }
         parameterEvents.fire(key,route:route.input,at:CACurrentMediaTime())
-        if controlOutputEnabled && route.output.enabled {sendParameterEvent(key)}
+        let accentMetadataEnabled=selectedSceneID == PulseOrbitSimulation.sceneID && pulseAccentKind(key) != nil
+            && [PulseOrbitOutputs.accentAngle,PulseOrbitOutputs.accentStrength].contains {self.route(for:$0).output.enabled}
+        if controlOutputEnabled && (route.output.enabled || accentMetadataEnabled) {sendParameterEvent(key)}
     }
     private func sendParameterEvent(_ key: String, test: Bool = false) {
-        guard outputIssue(for:key) == nil else { return }
         let route=route(for:key).output,id=controlEmissionID(key)
-        controlOutput.sendEvents([.init(id:id,route:route,value:1)],test:test)
+        if test,outputIssue(for:key) != nil {return}
+        var emissions: [ControlEmission] = (test || route.enabled) && outputIssue(for:key) == nil ? [.init(id:id,route:route,value:1)] : []
+        if !test,selectedSceneID == PulseOrbitSimulation.sceneID,!usesTexture,pulseAccentKind(key) != nil {
+            let metadata=[PulseOrbitOutputs.accentAngle,PulseOrbitOutputs.accentStrength].compactMap {key in
+                parameterSpecs.first {$0.id==key && self.route(for:key).output.enabled}
+            }
+            emissions=pulseEventEmissions(for:metadata,values:[PulseOrbitOutputs.accentAngle:lastPulseAccentAngle,
+                     PulseOrbitOutputs.accentStrength:lastPulseAccentStrength])+emissions
+        }
+        guard !emissions.isEmpty else {return}
+        controlOutput.sendEvents(emissions,test:test)
+    }
+    private func pulseAccentKind(_ key: String) -> PulseOrbitSimulation.AccentKind? {
+        switch key {
+        case SceneTrigger.departureID:return .departure
+        case SceneTrigger.breakthroughID:return .breakthrough
+        case SceneTrigger.addLineID:return .newOrbit
+        case SceneTrigger.completionID:return .completion
+        default:return nil
+        }
+    }
+    private func acceptsPulseCue() -> Bool {
+        guard selectedSceneID == PulseOrbitSimulation.sceneID,!usesTexture else {return true}
+        return pulseCueGate.accept(at:CACurrentMediaTime())
     }
     private func pulseEventEmissions(for specs: [ParameterSpec], values: [String:Double]) -> [ControlEmission] {
         specs.flatMap { spec -> [ControlEmission] in
@@ -715,7 +762,8 @@ final class OrbitModel: ObservableObject {
                 parameterSpecs.first { $0.id == key && route(for:key).output.enabled }
             }
             let values = [PulseOrbitOutputs.trigger:1, PulseOrbitOutputs.angle:crossing.angle, PulseOrbitOutputs.strength:crossing.strength]
-            controlOutput.sendEvents(pulseEventEmissions(for:specs,values:values))
+            let emissions=pulseEventEmissions(for:specs,values:values)
+            if !emissions.isEmpty && acceptsPulseCue() {controlOutput.sendEvents(emissions)}
         }
     }
     func startOSC() {
@@ -852,13 +900,13 @@ final class OrbitModel: ObservableObject {
         var packed = [width,height,view,Float(phaseTime)] + names.map { values[$0] ?? 0 }
         if selectedSceneID == PulseOrbitSimulation.sceneID {
             packed += pulseOrbit.uniforms
-            packed += [values["laneHue0"] ?? 0, values["laneHue1"] ?? 1, values["laneHue2"] ?? 0, Float(pulseOrbit.time)]
-            packed += [values["motion0"] ?? 0.85, values["motion1"] ?? 0.55, values["motion2"] ?? 0.65, values["motion3"] ?? 1]
-            packed += [values["orbit0"] ?? 0.35, values["orbit1"] ?? 1/3, values["orbit2"] ?? 1/3,
-                       values["orbit3"] ?? 1/3, values["orbit4"] ?? 1,
-                       values["link0"] ?? 0.375, values["link1"] ?? 0.65, values["link2"] ?? 0.7, values["link3"] ?? 0.35]
+            // These are authored motion rules, not hidden legacy controls.
+            packed += [0,1,0,Float(pulseOrbit.time)]+PulseOrbitSimulation.motionUniforms
+            packed += PulseOrbitSimulation.interactionUniforms
             packed += pulseOrbit.eventUniforms
             packed += pulseOrbit.extendedUniforms
+            packed += pulseOrbit.accentUniforms
+            packed += pulseOrbit.traceUniforms
             if playing {
                 pulseOrbit.advance(by: delta * Double(speed), controls: .init(uniforms: packed))
                 deliverPulseCrossings()

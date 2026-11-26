@@ -66,7 +66,7 @@ final class EventInbox {
         }
         let scenes=model.scenes.filter {!$0.testScene};precondition(scenes.count==8)
         var tested=0
-        for scene in scenes {
+        for scene in scenes where scene.id != PulseOrbitSimulation.sceneID {
             model.selectedSceneID=scene.id
             precondition(model.sceneTriggers.count==(scene.id==PulseOrbitSimulation.sceneID ? 4 : 3))
             for event in model.sceneTriggers where event.id != SceneTrigger.addLineID {
@@ -103,7 +103,8 @@ final class EventInbox {
             model.selectedSceneID=scene.id;pump(0.04)
             precondition(count(address)==5 && model.parameterEventCount(key)==0,"Cached high cue replayed")
         }
-        precondition(tested==24)
+        precondition(tested==21)
+        model.selectedSceneID=PulseOrbitSimulation.sceneID;model.playing=false
         // The add-line command changes topology, not a continuous parameter or temporary envelope.
         let addLine=SceneTrigger.addLineID,lineAddress="/qa/event/lines"
         model.setRoute(addLine) {$0.input.directOSCAddress="/qa/login"}
@@ -115,6 +116,7 @@ final class EventInbox {
             precondition(model.pulseLineCount==expected)
             for view in [Float(0),1,2] {precondition(model.uniforms(width:3840,height:2160,view:view)[PulseOrbitSimulation.lineCountOffset]==Float(expected))}
         }
+        wait("five manual line cues") {count(lineAddress)==5}
         pump(1);precondition(model.pulseLineCount==8,"Added lines must survive the event envelope")
         send(0.49);pump(0.05);precondition(model.pulseLineCount==8)
         let lineCue=OSCEncoder.floatMessage(address:"/qa/login",value:1)!
@@ -129,6 +131,7 @@ final class EventInbox {
         model.restartPlayback();precondition(model.pulseLineCount==3)
         model.setRoute(addLine) {$0.input.directOSCEnabled=false}
 
+        model.selectedSceneID="08_golden_drift";model.playing=false
         let key=model.sceneTriggers[0].id,address="/qa/event/"+model.selectedSceneID+"/"+key
         model.setInputBehavior(key,.threshold)
         let before=count(address)
@@ -160,16 +163,17 @@ final class EventInbox {
         model.save()
         let restored=OrbitModel(defaults:defaults,resources:bundle,controlOutput:ControlOutput())
         defer {restored.shutdownForTermination()}
-        for scene in scenes {
+        for scene in scenes where scene.id != PulseOrbitSimulation.sceneID {
             restored.selectedSceneID=scene.id
             for event in restored.sceneTriggers {
                 precondition(restored.route(for:event.id).output.enabled)
                 precondition(restored.parameterEventCount(event.id)==0)
             }
         }
+        restored.selectedSceneID=PulseOrbitSimulation.sceneID
         precondition(restored.pulseLineCount==3 && restored.pulseLineLimit==4,"Persist maximum, never replay accumulated line events")
         let events=inbox.snapshot().0.flatMap {OSCDecoder.decode($0)}.filter {$0.address.hasPrefix("/qa/event/")}
         precondition(events.allSatisfy {$0.values==[1]})
-        print("PASS: 24 transient triggers + persistent add-line command, 3–10 and custom-limit cycles, shared topology in every output, all 8 scenes, visual uniforms change and return, continuous controls/settings/routes unchanged, repeated OSC cues, threshold hysteresis, independent continuous OSC output, no heartbeat/backlog, persistence")
+        print("PASS: 21 transient triggers + persistent add-line command, 3–10 and custom-limit cycles, shared topology in every output, all 8 scenes, visual uniforms change and return, continuous controls/settings/routes unchanged, repeated OSC cues, threshold hysteresis, independent continuous OSC output, no heartbeat/backlog, persistence")
     }
 }

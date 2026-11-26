@@ -71,17 +71,20 @@ fragment float4 orbit_pulse_orbit_fragment(float4 position [[position]],
     (ROOT/'metal'/f'{sid}.metal').write_text(metal)
     defaults = dict(zip(LAYOUT, [1280,720,1,0,.72,.12,.55,0,1,3,0,0,0,.128,0,12,1,.8,.25,0,0,.62,.86,.55]))
     defaults.update({p['id']:p['defaultValue'] for p in PARAMETERS[sid]})
-    return dict(id=sid,name='Pulse Orbit',description='레드·화이트 펄스 · 근접 연결과 교차 파동',
+    defaults.update(laneHue0=0,laneHue1=1,laneHue2=0,motion0=.82,motion1=.58,motion2=.55,motion3=1,
+                    orbit0=.72,orbit1=.30,orbit2=.39,orbit3=.24,orbit4=0,
+                    link0=.2,link1=.45,link2=.45,link3=.35)
+    return dict(id=sid,name='Pulse Orbit',description='중력에 모이는 빛 · 출발·돌파·새 궤도·완료',
                 referenceSeconds=None,referenceImage=None,texture=None,
                 metal=f'metal/{sid}.metal',isf=None,computeFunction='orbit_pulse_orbit_compute',
                 fragmentFunction='orbit_pulse_orbit_fragment',parameters=PARAMETERS[sid],
                 compatibilityParameters=[],defaults=defaults,defaultClockSpeed=1,
                 sensorMappingEnabled=True,testScene=False,nativeSimulation='pulseOrbit',
-                uniformBuffer=dict(sizeBytes=684,baseFloatCount=24,positions=12,velocities=12,
+                uniformBuffer=dict(sizeBytes=2332,baseFloatCount=24,positions=12,velocities=12,
                                    trackHues=['laneHue0','laneHue1','laneHue2'],simulationTimeFloat=51,
                                    motionControls=['motion0','motion1','motion2','motion3'],
                                    interactionControls=['orbit0','orbit1','orbit2','orbit3','orbit4','link0','link1','link2','link3'],
-                                   eventFloatOffset=65,eventCount=16,eventFields=['angle','time','strength'],substepRemainderFloat=113,extraPositions=28,extraVelocities=28,lineCountFloat=170,maximumLines=10))
+                                   eventFloatOffset=65,eventCount=16,eventFields=['angle','time','strength'],substepRemainderFloat=113,extraPositions=28,extraVelocities=28,lineCountFloat=170,maximumLines=10,accentFloatOffset=171,accentCount=24,accentStride=9,accentSerialFloat=387,traceFloatOffset=388,traceCount=16,traceStride=12,traceSerialFloat=580,lastTraceBirthFloat=581,lastTraceCenterFloat=582))
 
 def main():
     common = (ROOT/'src/common.glsl').read_text()
@@ -217,26 +220,9 @@ vertex float4 orbit_fullscreen_vertex(uint id [[vertex_id]]) {
 }
 ''')
     (ROOT/'config/scenes.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n')
-    mappings={'schemaVersion':1,'status':'example bindings; native app supports per-parameter OSC input and MIDI/OSC output',
-      'osc':{'bindAddress':'0.0.0.0','udpPort':9000,'expectedIntervalSeconds':30,'staleAfterSeconds':90},
-      'sensors':[{'id':'racing_speed','address':'/park/racing/speed','argument':0,'type':'float','range':[0,1]},
-                 {'id':'visitors','address':'/park/visitors','argument':0,'type':'float','range':[0,1]}],
-      'scenes':{}}
-    for scene in manifest['scenes']:
-        if scene['testScene']: mappings['scenes'][scene['id']]=[]; continue
-        first_control=scene['parameters'][0]
-        second_control=scene['parameters'][1]
-        mappings['scenes'][scene['id']]=[
-          {'sensor':'racing_speed','target':'clock.speed','outputRange':[0.25,1.5],
-           'clamp':True,'smoothingSeconds':8,'staleTarget':scene['defaultClockSpeed']},
-          {'sensor':'visitors','target':'parameter.'+first_control['id'],
-           'outputRange':[first_control['minimum'],first_control['maximum']],
-           'clamp':True,'smoothingSeconds':12,'staleTarget':first_control['defaultValue']},
-          {'sensor':'racing_speed','target':'parameter.'+second_control['id'],
-           'outputRange':[second_control['minimum'],second_control['maximum']],
-           'clamp':True,'smoothingSeconds':8,'staleTarget':second_control['defaultValue']}]
-    (ROOT/'config/osc-mappings.example.json').write_text(json.dumps(mappings,ensure_ascii=False,indent=2)+'\n')
+    from export_osc_reference import export_osc_reference
+    export_osc_reference()
     build_texture_shader()
-    print(f'Built {len(SCENES)+1} Metal shaders and {len(SCENES)} ISF generators; Pulse Orbit uses a 684-byte stateful layout.')
+    print(f'Built {len(SCENES)+1} Metal shaders and {len(SCENES)} ISF generators; Pulse Orbit uses a 2332-byte stateful layout.')
 
 if __name__=='__main__': main()
